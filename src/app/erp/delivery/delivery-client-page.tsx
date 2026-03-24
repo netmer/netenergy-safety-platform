@@ -2,6 +2,8 @@
 
 import React, { useState, useMemo, useTransition } from 'react';
 import type { DeliveryPackage, DeliveryItemStatus, DeliverableType, Course, TrainingSchedule } from '@/lib/course-data';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy } from 'firebase/firestore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -164,15 +166,25 @@ function DeliveryDetailDialog({ pkg, open, onClose, onUpdated, actorName }: Deli
 }
 
 interface DeliveryClientPageProps {
-    initialPackages: DeliveryPackage[];
     courses: Course[];
     schedules: TrainingSchedule[];
 }
 
-export function DeliveryClientPage({ initialPackages, courses, schedules }: DeliveryClientPageProps) {
+export function DeliveryClientPage({ courses, schedules }: DeliveryClientPageProps) {
     const { profile } = useAuth();
     const actorName = profile?.displayName || profile?.nickname || 'ระบบ';
-    const [packages, setPackages] = useState<DeliveryPackage[]>(initialPackages);
+    const firestore = useFirestore();
+
+    const packagesQuery = useMemoFirebase(() => {
+        if (!firestore) return null;
+        return query(collection(firestore, 'deliveryPackages'), orderBy('createdAt', 'desc'));
+    }, [firestore]);
+
+    const { data: packagesData, isLoading: pkgLoading } = useCollection<DeliveryPackage>(packagesQuery);
+    const livePackages = packagesData ?? [];
+
+    const [localUpdates, setLocalUpdates] = useState<Map<string, DeliveryPackage>>(new Map());
+    const packages = livePackages.map(p => localUpdates.get(p.id) ?? p);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<DeliveryItemStatus | 'all'>('all');
     const [courseFilter, setCourseFilter] = useState('all');
@@ -183,7 +195,7 @@ export function DeliveryClientPage({ initialPackages, courses, schedules }: Deli
     const { toast } = useToast();
 
     const handleUpdated = (updated: DeliveryPackage) => {
-        setPackages(prev => prev.map(p => p.id === updated.id ? updated : p));
+        setLocalUpdates(prev => new Map(prev).set(updated.id, updated));
         if (selectedPkg?.id === updated.id) setSelectedPkg(updated);
     };
 
@@ -216,11 +228,14 @@ export function DeliveryClientPage({ initialPackages, courses, schedules }: Deli
         startTransition(async () => {
             const res = await batchUpdateSchedulePackages(scheduleId, newStatus, actorName);
             if (res.success) {
-                setPackages(prev => prev.map(p => {
-                    if (p.scheduleId !== scheduleId) return p;
-                    const updatedItems = p.items.map(i => i.status !== 'ไม่มี' ? { ...i, status: newStatus } : i);
-                    return { ...p, items: updatedItems, overallStatus: newStatus };
-                }));
+                setLocalUpdates(prev => {
+                    const next = new Map(prev);
+                    packages.filter(p => p.scheduleId === scheduleId).forEach(p => {
+                        const updatedItems = p.items.map(i => i.status !== 'ไม่มี' ? { ...i, status: newStatus } : i);
+                        next.set(p.id, { ...p, items: updatedItems, overallStatus: newStatus });
+                    });
+                    return next;
+                });
                 toast({ title: 'อัปเดตสำเร็จ', description: res.message });
             } else {
                 toast({ title: 'เกิดข้อผิดพลาด', description: res.message, variant: 'destructive' });

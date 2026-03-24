@@ -1,20 +1,23 @@
 import { collection, getDocs, orderBy, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import type { DeliveryPackage, Course, TrainingSchedule } from '@/lib/course-data';
+import type { Course, TrainingSchedule } from '@/lib/course-data';
 import { DeliveryClientPage } from './delivery-client-page';
+import { unstable_noStore as noStore } from 'next/cache';
 
-export const dynamic = 'force-dynamic';
+export const metadata = {
+    title: 'การจัดส่ง | NET ERP',
+};
 
 export default async function DeliveryPage() {
-    const [pkgSnap, courseSnap, schedSnap] = await Promise.all([
-        getDocs(query(collection(db, 'deliveryPackages'), orderBy('createdAt', 'desc'))),
+    noStore();
+    // Only fetch public collections server-side; deliveryPackages are fetched client-side (requires auth)
+    const [courseSnap, schedSnap] = await Promise.all([
         getDocs(collection(db, 'courses')),
-        getDocs(collection(db, 'trainingSchedules')),
+        getDocs(query(collection(db, 'trainingSchedules'), orderBy('startDate', 'desc'))),
     ]);
 
-    const packages = pkgSnap.docs.map(d => ({ id: d.id, ...d.data() } as DeliveryPackage));
     const courses = courseSnap.docs.map(d => ({ id: d.id, ...d.data() } as Course));
     const schedules = schedSnap.docs.map(d => ({ id: d.id, ...d.data() } as TrainingSchedule));
 
-    return <DeliveryClientPage initialPackages={packages} courses={courses} schedules={schedules} />;
+    return <DeliveryClientPage courses={courses} schedules={schedules} />;
 }
