@@ -30,7 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CaregiverSelect } from '@/components/erp/caregiver-select';
 import { EditAttendeeModal } from '@/components/erp/edit-attendee-modal';
 import { AddWalkinAttendeeModal } from '@/components/erp/add-walkin-attendee-modal';
-import { bulkImportWalkInAttendees, type BulkImportRow } from '@/app/erp/attendees/actions';
+import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, type BulkImportRow } from '@/app/erp/attendees/actions';
 
 type StatusFilter = 'all' | 'pending' | 'verified';
 
@@ -229,14 +229,22 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         if (!firestore || selectedIds.size === 0) return;
         startBulkTransition(async () => {
             try {
-                const batch = writeBatch(firestore);
-                selectedIds.forEach(id => {
-                    batch.update(doc(firestore, 'trainingRecords', id), { status: statusValue });
-                });
-                await batch.commit();
                 const label = attendeeStatusConfig[statusValue]?.label || statusValue;
-                await logHistory('อัปเดตสถานะหมู่', `เปลี่ยนสถานะเป็น "${label}" สำหรับผู้อบรม ${selectedIds.size} คน`);
-                toast({ title: 'บันทึกสำเร็จ', description: `เปลี่ยนสถานะ ${selectedIds.size} คน เป็น "${label}"` });
+                if (statusValue === 'completed') {
+                    // Use server action for 'completed' to generate certificates + searchTokens properly
+                    const result = await bulkCompleteTrainingRecords(Array.from(selectedIds));
+                    if (!result.success) throw new Error(result.message);
+                    await logHistory('ตัดเกรดผ่านหมู่', `ตัดเกรด "${label}" สำหรับผู้อบรม ${selectedIds.size} คน`);
+                    toast({ title: 'บันทึกสำเร็จ', description: result.message });
+                } else {
+                    const batch = writeBatch(firestore);
+                    selectedIds.forEach(id => {
+                        batch.update(doc(firestore, 'trainingRecords', id), { status: statusValue });
+                    });
+                    await batch.commit();
+                    await logHistory('อัปเดตสถานะหมู่', `เปลี่ยนสถานะเป็น "${label}" สำหรับผู้อบรม ${selectedIds.size} คน`);
+                    toast({ title: 'บันทึกสำเร็จ', description: `เปลี่ยนสถานะ ${selectedIds.size} คน เป็น "${label}"` });
+                }
                 setSelectedIds(new Set());
             } catch (e: any) {
                 toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });

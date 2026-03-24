@@ -7,6 +7,7 @@ import type { Registration, AttendeeStatus, RegistrationFormField, AttendeeAtten
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {nanoid} from 'nanoid';
 import { format, addYears } from 'date-fns';
+import { generateSearchTokens } from '@/lib/search-utils';
 import { z } from 'zod';
 
 const PAGE_SIZE = 30;
@@ -94,13 +95,13 @@ export async function findAttendeeByNationalId(attendeeId: string) {
 
 export async function updateTrainingRecord(recordId: string, updates: Partial<TrainingRecord>) {
     const recordRef = doc(db, 'trainingRecords', recordId);
-    
-    // If marking as completed, generate certificate ID, date, and expiry date
+
+    // If marking as completed, generate certificate ID, date, expiry date, and search tokens
     if (updates.status === 'completed') {
         const recordSnap = await getDoc(recordRef);
         if (recordSnap.exists()) {
-            const recordData = recordSnap.data();
-            // Only generate if it doesn't exist to prevent overwriting
+            const recordData = recordSnap.data() as TrainingRecord;
+            // Only generate certificate info if it doesn't exist to prevent overwriting
             if (!recordData.certificateId) {
                 const now = new Date();
                 const year = now.getFullYear() + 543; // Buddhist year
@@ -121,9 +122,17 @@ export async function updateTrainingRecord(recordId: string, updates: Partial<Tr
                     }
                 }
             }
+            // Always populate search/index fields when completing
+            const completionTime = updates.completionDate ? new Date(updates.completionDate) : new Date();
+            updates.passedTraining = true;
+            updates.completionYearCE = completionTime.getFullYear();
+            updates.searchTokens = generateSearchTokens(
+                recordData.attendeeName,
+                recordData.companyName
+            );
         }
     }
-    
+
     await updateDoc(recordRef, updates);
     revalidatePath('/erp/attendees');
     revalidatePath('/erp/history');
@@ -382,6 +391,92 @@ export async function deleteTrainingRecord(recordId: string) {
     }
 }
 
+
+/**
+ * Bulk complete training records with proper certificate generation per record.
+ * Unlike bulkUpdateTrainingRecords, this generates a unique certificateId, issue date,
+ * expiry date, and searchTokens for each record individually.
+ */
+export async function bulkCompleteTrainingRecords(recordIds: string[]): Promise<{ success: boolean; message: string; completed: number; skipped: number }> {
+    if (!recordIds || recordIds.length === 0) {
+        return { success: false, message: 'ไม่มีรายการที่เลือก', completed: 0, skipped: 0 };
+    }
+
+    const CHUNK_SIZE = 30; // Read in smaller batches first
+    const WRITE_CHUNK = 400;
+    const now = new Date();
+    const yearBE = now.getFullYear() + 543;
+    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const completionYearCE = now.getFullYear();
+
+    // Cache course validity to avoid redundant reads
+    const courseCache = new Map<string, number | null>();
+
+    const recordUpdates: { id: string; updates: Partial<TrainingRecord> }[] = [];
+
+    for (let i = 0; i < recordIds.length; i += CHUNK_SIZE) {
+        const chunk = recordIds.slice(i, i + CHUNK_SIZE);
+        const snaps = await Promise.all(chunk.map(id => getDoc(doc(db, 'trainingRecords', id))));
+
+        for (const snap of snaps) {
+            if (!snap.exists()) continue;
+            const data = snap.data() as TrainingRecord;
+
+            // Skip already completed records
+            if (data.status === 'completed' && data.certificateId) {
+                recordUpdates.push({ id: snap.id, updates: {} }); // mark as skipped (empty updates)
+                continue;
+            }
+
+            // Get course validity
+            if (!courseCache.has(data.courseId)) {
+                const courseSnap = await getDoc(doc(db, 'courses', data.courseId));
+                if (courseSnap.exists()) {
+                    const c = courseSnap.data() as Course;
+                    courseCache.set(data.courseId, c.validityYears && c.validityYears > 0 ? c.validityYears : null);
+                } else {
+                    courseCache.set(data.courseId, null);
+                }
+            }
+            const validityYears = courseCache.get(data.courseId) ?? null;
+            const expiryDate = validityYears ? addYears(now, validityYears).toISOString() : null;
+
+            const randomPart = nanoid(6).toUpperCase();
+            const updates: Partial<TrainingRecord> = {
+                status: 'completed',
+                certificateId: data.certificateId || `${yearBE}${month}-${randomPart}`,
+                certificateIssueDate: data.certificateIssueDate || now.toISOString(),
+                completionDate: data.completionDate || now.toISOString(),
+                expiryDate,
+                passedTraining: true,
+                completionYearCE,
+                searchTokens: generateSearchTokens(data.attendeeName, data.companyName),
+            };
+            recordUpdates.push({ id: snap.id, updates });
+        }
+    }
+
+    // Write in batches
+    const toWrite = recordUpdates.filter(r => Object.keys(r.updates).length > 0);
+    const skipped = recordUpdates.length - toWrite.length;
+
+    for (let i = 0; i < toWrite.length; i += WRITE_CHUNK) {
+        const chunk = toWrite.slice(i, i + WRITE_CHUNK);
+        const batch = writeBatch(db);
+        chunk.forEach(({ id, updates }) => batch.update(doc(db, 'trainingRecords', id), updates));
+        await batch.commit();
+    }
+
+    revalidatePath('/erp/attendees');
+    revalidatePath('/erp/history');
+    revalidatePath('/erp/certificate');
+    return {
+        success: true,
+        message: `ตัดเกรดผ่านการอบรม ${toWrite.length} ท่าน${skipped > 0 ? ` (ข้าม ${skipped} ที่ผ่านแล้ว)` : ''}`,
+        completed: toWrite.length,
+        skipped,
+    };
+}
 
 /** Bulk update multiple training records in one call (batched to stay under Firestore 500-op limit) */
 export async function bulkUpdateTrainingRecords(recordIds: string[], updates: Partial<TrainingRecord>) {

@@ -139,7 +139,11 @@ export type TrainingRecord = {
     recordSpecificDocs?: AdditionalDoc[]; // Documents specific to this training instance
     certificateId?: string; // Unique Certificate ID
     certificateIssueDate?: string; // ISO string
-    expiryDate?: string | null; // New field for certificate expiry date
+    expiryDate?: string | null; // Certificate expiry date
+    // Scale / search fields (populated on completion)
+    searchTokens?: string[];      // Array of lowercase search tokens for prefix search
+    completionYearCE?: number;    // CE year of completion (for year filter index)
+    passedTraining?: boolean;     // true when status === 'completed'
 };
 
 

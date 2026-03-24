@@ -59,6 +59,77 @@
         { "fieldPath": "courseId", "order": "ASCENDING" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "completionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "companyName", "order": "ASCENDING" },
+        { "fieldPath": "completionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "courseId", "order": "ASCENDING" },
+        { "fieldPath": "completionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "completionYearCE", "order": "ASCENDING" },
+        { "fieldPath": "completionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "courseId", "order": "ASCENDING" },
+        { "fieldPath": "completionYearCE", "order": "ASCENDING" },
+        { "fieldPath": "completionDate", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "passedTraining", "order": "ASCENDING" },
+        { "fieldPath": "searchTokens", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "passedTraining", "order": "ASCENDING" },
+        { "fieldPath": "searchTokens", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "completionYearCE", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "trainingRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "passedTraining", "order": "ASCENDING" },
+        { "fieldPath": "searchTokens", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "courseId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []
