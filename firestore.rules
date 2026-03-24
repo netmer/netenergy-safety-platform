@@ -1,0 +1,84 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * NetEnergy Safety Platform Security Rules v2.6
+     */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin';
+    }
+
+    function isERPStaff() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+             getUserData().role in ['admin', 'call_center', 'training_team', 'inspection_team', 'accounting_team'];
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // User Data
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isERPStaff();
+      allow list: if isERPStaff();
+      allow create: if isSignedIn();
+      allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Public & Master Data
+    match /courses/{courseId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /courseCategories/{categoryId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /trainingSchedules/{scheduleId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /blogPosts/{postId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /certifications/{certId} { allow get, list: if true; allow write: if isAdmin(); }
+    match /clients/{clientId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /instructors/{instructorId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /registrationForms/{formId} { allow get, list: if true; allow write: if isERPStaff(); }
+    match /certificateTemplates/{templateId} { allow get, list: if true; allow write: if isERPStaff(); }
+
+    // Business Logic
+    match /registrations/{registrationId} {
+      allow get, list: if isOwner(resource.data.userId) || isERPStaff();
+      allow create: if isSignedIn();
+      allow update, delete: if isERPStaff();
+    }
+
+    match /trainingRecords/{recordId} {
+      allow get, list: if true; // Public verification access
+      allow create, update, delete: if isERPStaff();
+    }
+
+    match /attendees/{attendeeId} {
+      allow get: if true;
+      allow list, write: if isERPStaff();
+    }
+
+    match /requestsForQuote/{quoteId} {
+      allow create: if true;
+      allow get, list, update, delete: if isERPStaff();
+    }
+
+    match /analyticsEvents/{eventId} {
+      allow create: if true;
+      allow get, list, delete: if isAdmin();
+    }
+
+    // Email System (Firebase Extension Trigger)
+    match /mail/{mailId} {
+      allow create: if isSignedIn();
+      allow get, list, update, delete: if isAdmin();
+    }
+  }
+}

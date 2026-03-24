@@ -1,0 +1,32 @@
+{
+  "hero": {
+    "url": "https://firebasestorage.googleapis.com/v0/b/netenergy-safety-platform.firebasestorage.app/o/hero.png?alt=media&token=1f2fd308-ddc4-49db-a9ad-2a479244779c",
+    "width": 1920,
+    "height": 1080,
+    "hint": "modern safety control room"
+  },
+  "logo": {
+    "url": "https://firebasestorage.googleapis.com/v0/b/netenergy-safety-platform.firebasestorage.app/o/Logo.jpg?alt=media&token=3f660eec-b17e-459d-9320-7014e719466e",
+    "width": 400,
+    "height": 120,
+    "hint": "net safety logo"
+  },
+  "consulting_hero": {
+    "url": "https://images.unsplash.com/photo-1581092160562-40aa08e78837?auto=format&fit=crop&q=80&w=1200&h=600",
+    "width": 1200,
+    "height": 600,
+    "hint": "safety professional inspection"
+  },
+  "facebook_preview": {
+    "url": "https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?auto=format&fit=crop&q=80&w=800&h=450",
+    "width": 800,
+    "height": 450,
+    "hint": "social media connection"
+  },
+  "certification_placeholder": {
+    "url": "https://picsum.photos/seed/cert/600/800",
+    "width": 600,
+    "height": 800,
+    "hint": "company certification"
+  }
+}

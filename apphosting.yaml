@@ -1,0 +1,23 @@
+kind: "AppHostingYaml"
+schemaVersion: "v1"
+
+# Environment Variables สำหรับขั้นตอน Build และ Runtime
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyAb4y2AWCoUyDBJvh8Emoqs07Da6oPJxAs"
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "netenergy-safety-platform.firebaseapp.com"
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "netenergy-safety-platform"
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: "netenergy-safety-platform.firebasestorage.app"
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "131556112410"
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:131556112410:web:dcbed5f1745e4d696c79a3"
+
+# ตั้งค่าทรัพยากรสำหรับการรันแอป
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  memoryMiB: 512

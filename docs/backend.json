@@ -1,0 +1,878 @@
+{
+  "entities": {
+    "UserProfile": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "UserProfile",
+      "type": "object",
+      "description": "Represents a user profile in the system, which could be an individual participant or a contact person for an organization. This entity stores non-authentication-related user information.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the UserProfile entity."
+        },
+        "firstName": {
+          "type": "string",
+          "description": "The first name of the user."
+        },
+        "lastName": {
+          "type": "string",
+          "description": "The last name of the user."
+        },
+        "email": {
+          "type": "string",
+          "description": "The email address of the user.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "The phone number of the user."
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Reference to the Organization this user belongs to, if applicable. (Relationship: Organization 1:N UserProfile)"
+        }
+      },
+      "required": [
+        "id",
+        "firstName",
+        "lastName",
+        "email"
+      ]
+    },
+    "Organization": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Organization",
+      "type": "object",
+      "description": "Represents a corporate client or business entity that requests training services, registers employees, or requests in-house training.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Organization entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The legal name of the organization."
+        },
+        "contactPersonId": {
+          "type": "string",
+          "description": "Reference to the primary contact person within the organization. (Relationship: UserProfile 1:N Organization)"
+        },
+        "email": {
+          "type": "string",
+          "description": "The primary email address for the organization.",
+          "format": "email"
+        },
+        "phone": {
+          "type": "string",
+          "description": "The primary phone number for the organization."
+        },
+        "address": {
+          "type": "string",
+          "description": "The full physical address of the organization."
+        },
+        "taxId": {
+          "type": "string",
+          "description": "The tax identification number of the organization for invoicing purposes."
+        },
+        "registrationDate": {
+          "type": "string",
+          "description": "The date and time when the organization was registered in the system.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "email",
+        "phone",
+        "address",
+        "registrationDate"
+      ]
+    },
+    "CourseCategory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CourseCategory",
+      "type": "object",
+      "description": "Defines categories for courses, such as 'Legal Compliance Courses' or 'Standard-Based Courses'.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the CourseCategory entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the course category (e.g., 'หลักสูตรตามกฎหมาย')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the course category."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "CourseRoleTag": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CourseRoleTag",
+      "type": "object",
+      "description": "Defines tags to categorize courses based on target roles or positions (e.g., 'For Safety Officers', 'For Supervisors').",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the CourseRoleTag entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the role tag (e.g., 'สำหรับ จป. วิชาชีพ')."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the role tag."
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "Course": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Course",
+      "type": "object",
+      "description": "Represents a single training course offered by NetEnergy Safety Platform, detailing its curriculum, objectives, and pricing.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Course entity."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the course."
+        },
+        "slug": {
+          "type": "string",
+          "description": "A URL-friendly identifier for the course, used for SEO."
+        },
+        "shortDescription": {
+          "type": "string",
+          "description": "A brief summary of the course."
+        },
+        "fullDescription": {
+          "type": "string",
+          "description": "The comprehensive description of the course, including objectives and what participants will gain."
+        },
+        "targetAudienceDescription": {
+          "type": "string",
+          "description": "A description of the target audience for this course."
+        },
+        "contentOutline": {
+          "type": "string",
+          "description": "A detailed outline of the course content and topics covered."
+        },
+        "faqs": {
+          "type": "array",
+          "description": "An array of frequently asked questions specific to this course, each entry can be a Q&A string.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "price": {
+          "type": "number",
+          "description": "The public training price for the course."
+        },
+        "isLegalCompliance": {
+          "type": "boolean",
+          "description": "Indicates if the course is required by law."
+        },
+        "thumbnailImageUrl": {
+          "type": "string",
+          "description": "URL to the thumbnail image representing the course.",
+          "format": "uri"
+        },
+        "brochurePdfUrl": {
+          "type": "string",
+          "description": "URL to a PDF brochure for the course.",
+          "format": "uri"
+        },
+        "categoryIds": {
+          "type": "array",
+          "description": "References to CourseCategory entities that this course belongs to. (Relationship: CourseCategory N:N Course)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "roleTagIds": {
+          "type": "array",
+          "description": "References to CourseRoleTag entities that apply to this course's target audience. (Relationship: CourseRoleTag N:N Course)",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "slug",
+        "shortDescription",
+        "fullDescription",
+        "price",
+        "isLegalCompliance",
+        "categoryIds"
+      ]
+    },
+    "CourseSchedule": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "CourseSchedule",
+      "type": "object",
+      "description": "Represents a specific scheduled instance of a public training course, including its date, time, location, and seat availability.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the CourseSchedule entity."
+        },
+        "courseId": {
+          "type": "string",
+          "description": "Reference to the Course being scheduled. (Relationship: Course 1:N CourseSchedule)"
+        },
+        "startTime": {
+          "type": "string",
+          "description": "The start date and time of the scheduled course.",
+          "format": "date-time"
+        },
+        "endTime": {
+          "type": "string",
+          "description": "The end date and time of the scheduled course.",
+          "format": "date-time"
+        },
+        "location": {
+          "type": "string",
+          "description": "The physical or virtual location where the course will be held."
+        },
+        "maxSeats": {
+          "type": "number",
+          "description": "The maximum number of participants allowed for this schedule."
+        },
+        "availableSeats": {
+          "type": "number",
+          "description": "The current number of available seats for this schedule."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the course schedule (e.g., 'เปิดรับสมัคร' (Open), 'เต็ม' (Full), 'ยกเลิก' (Cancelled))."
+        },
+        "registrationCutoffDate": {
+          "type": "string",
+          "description": "The last date and time for participants to register for this schedule.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "courseId",
+        "startTime",
+        "endTime",
+        "location",
+        "maxSeats",
+        "availableSeats",
+        "status"
+      ]
+    },
+    "Registration": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Registration",
+      "type": "object",
+      "description": "Records a participant's enrollment in a specific scheduled training course.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Registration entity."
+        },
+        "courseScheduleId": {
+          "type": "string",
+          "description": "Reference to the CourseSchedule the participant is registering for. (Relationship: CourseSchedule 1:N Registration)"
+        },
+        "participantId": {
+          "type": "string",
+          "description": "Reference to the UserProfile of the individual participant. (Relationship: UserProfile 1:N Registration)"
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Optional reference to the Organization that sponsored this registration. (Relationship: Organization 1:N Registration)"
+        },
+        "registrationDate": {
+          "type": "string",
+          "description": "The date and time when the registration was submitted.",
+          "format": "date-time"
+        },
+        "paymentStatus": {
+          "type": "string",
+          "description": "The payment status of the registration (e.g., 'Pending', 'Paid', 'Cancelled')."
+        },
+        "invoiceId": {
+          "type": "string",
+          "description": "Reference to the Invoice generated for this registration. (Relationship: Invoice 1:1 Registration)"
+        }
+      },
+      "required": [
+        "id",
+        "courseScheduleId",
+        "participantId",
+        "registrationDate",
+        "paymentStatus"
+      ]
+    },
+    "Invoice": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Invoice",
+      "type": "object",
+      "description": "Stores details related to payment invoices generated for registrations or other services.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Invoice entity."
+        },
+        "invoiceNumber": {
+          "type": "string",
+          "description": "The unique invoice number."
+        },
+        "registrationId": {
+          "type": "string",
+          "description": "Reference to the Registration associated with this invoice. (Relationship: Registration 1:1 Invoice)"
+        },
+        "issueDate": {
+          "type": "string",
+          "description": "The date and time when the invoice was issued.",
+          "format": "date-time"
+        },
+        "dueDate": {
+          "type": "string",
+          "description": "The date and time by which the invoice is due.",
+          "format": "date-time"
+        },
+        "amount": {
+          "type": "number",
+          "description": "The subtotal amount of the invoice before tax."
+        },
+        "taxAmount": {
+          "type": "number",
+          "description": "The tax amount applied to the invoice."
+        },
+        "totalAmount": {
+          "type": "number",
+          "description": "The total amount due, including tax."
+        },
+        "currency": {
+          "type": "string",
+          "description": "The currency of the invoice (e.g., 'THB')."
+        },
+        "paymentMethod": {
+          "type": "string",
+          "description": "The chosen payment method (e.g., 'Bank Transfer', 'Credit Card')."
+        },
+        "paymentDate": {
+          "type": "string",
+          "description": "The date and time when the payment was received.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the invoice (e.g., 'Issued', 'Paid', 'Overdue', 'Cancelled')."
+        },
+        "invoicePdfUrl": {
+          "type": "string",
+          "description": "URL to the generated PDF document of the invoice.",
+          "format": "uri"
+        },
+        "billToOrganizationId": {
+          "type": "string",
+          "description": "Optional reference to the Organization being billed. (Relationship: Organization 1:N Invoice)"
+        },
+        "billToUserProfileId": {
+          "type": "string",
+          "description": "Optional reference to the UserProfile being billed (for individual payments). (Relationship: UserProfile 1:N Invoice)"
+        }
+      },
+      "required": [
+        "id",
+        "invoiceNumber",
+        "issueDate",
+        "dueDate",
+        "totalAmount",
+        "currency",
+        "status"
+      ]
+    },
+    "RequestForQuote": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "RequestForQuote",
+      "type": "object",
+      "description": "Records a request for a custom in-house training quotation from an organization for a specific course.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the RequestForQuote entity."
+        },
+        "courseId": {
+          "type": "string",
+          "description": "Reference to the Course for which the quotation is requested. (Relationship: Course 1:N RequestForQuote)"
+        },
+        "organizationId": {
+          "type": "string",
+          "description": "Optional reference to an existing Organization making the request. (Relationship: Organization 1:N RequestForQuote)"
+        },
+        "organizationName": {
+          "type": "string",
+          "description": "The name of the organization requesting the quote. Required if organizationId is not provided."
+        },
+        "contactPersonFirstName": {
+          "type": "string",
+          "description": "The first name of the contact person for this request."
+        },
+        "contactPersonLastName": {
+          "type": "string",
+          "description": "The last name of the contact person for this request."
+        },
+        "contactPersonEmail": {
+          "type": "string",
+          "description": "The email address of the contact person.",
+          "format": "email"
+        },
+        "contactPersonPhone": {
+          "type": "string",
+          "description": "The phone number of the contact person."
+        },
+        "numberOfParticipants": {
+          "type": "number",
+          "description": "The estimated number of participants for the in-house training."
+        },
+        "preferredStartDate": {
+          "type": "string",
+          "description": "The preferred start date for the in-house training.",
+          "format": "date"
+        },
+        "preferredEndDate": {
+          "type": "string",
+          "description": "The preferred end date for the in-house training.",
+          "format": "date"
+        },
+        "additionalRequirements": {
+          "type": "string",
+          "description": "Any additional specific requirements or comments from the requester."
+        },
+        "status": {
+          "type": "string",
+          "description": "The current status of the quotation request (e.g., 'New', 'Quoted', 'Accepted', 'Rejected', 'Cancelled')."
+        },
+        "requestDate": {
+          "type": "string",
+          "description": "The date and time when the quotation request was submitted.",
+          "format": "date-time"
+        },
+        "quoteIssueDate": {
+          "type": "string",
+          "description": "The date and time when the quotation was issued by the platform.",
+          "format": "date-time"
+        },
+        "quotedAmount": {
+          "type": "number",
+          "description": "The quoted price for the in-house training, once issued."
+        },
+        "quotePdfUrl": {
+          "type": "string",
+          "description": "URL to the generated PDF document of the quotation.",
+          "format": "uri"
+        }
+      },
+      "required": [
+        "id",
+        "courseId",
+        "contactPersonFirstName",
+        "contactPersonLastName",
+        "contactPersonEmail",
+        "contactPersonPhone",
+        "numberOfParticipants",
+        "requestDate",
+        "status"
+      ]
+    },
+    "Article": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "Article",
+      "type": "object",
+      "description": "Represents a blog post or article published on the platform, providing educational content related to safety and training.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the Article entity."
+        },
+        "title": {
+          "type": "string",
+          "description": "The title of the article."
+        },
+        "slug": {
+          "type": "string",
+          "description": "A URL-friendly identifier for the article, used for SEO."
+        },
+        "content": {
+          "type": "string",
+          "description": "The full content of the article, typically in rich text or markdown format."
+        },
+        "thumbnailImageUrl": {
+          "type": "string",
+          "description": "URL to the thumbnail image for the article.",
+          "format": "uri"
+        },
+        "publishedDate": {
+          "type": "string",
+          "description": "The date and time when the article was published.",
+          "format": "date-time"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "Reference to the UserProfile of the author of the article. (Relationship: UserProfile 1:N Article)"
+        },
+        "categoryIds": {
+          "type": "array",
+          "description": "References to ArticleCategory entities that this article belongs to. (Relationship: ArticleCategory N:N Article)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "metaDescription": {
+          "type": "string",
+          "description": "SEO meta description for the article."
+        },
+        "metaKeywords": {
+          "type": "string",
+          "description": "SEO meta keywords for the article."
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "slug",
+        "content",
+        "publishedDate",
+        "authorId",
+        "categoryIds"
+      ]
+    },
+    "ArticleCategory": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ArticleCategory",
+      "type": "object",
+      "description": "Defines categories for articles to help organize blog content.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ArticleCategory entity."
+        },
+        "name": {
+          "type": "string",
+          "description": "The name of the article category."
+        },
+        "slug": {
+          "type": "string",
+          "description": "A URL-friendly identifier for the category."
+        },
+        "description": {
+          "type": "string",
+          "description": "A brief description of the article category."
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "slug"
+      ]
+    },
+    "ComplianceInquiry": {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "title": "ComplianceInquiry",
+      "type": "object",
+      "description": "Records inquiries made through the AI-powered Compliance Checker Tool, capturing user input and recommended courses.",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique identifier for the ComplianceInquiry entity."
+        },
+        "industryType": {
+          "type": "string",
+          "description": "The industry type provided by the user (e.g., 'Manufacture', 'Service')."
+        },
+        "numberOfEmployees": {
+          "type": "number",
+          "description": "The number of employees specified by the user."
+        },
+        "inquiryDetails": {
+          "type": "string",
+          "description": "A summary of the user's input from the questionnaire."
+        },
+        "recommendedCourseIds": {
+          "type": "array",
+          "description": "References to Course entities recommended by the tool based on the inquiry. (Relationship: Course N:N ComplianceInquiry)",
+          "items": {
+            "type": "string"
+          }
+        },
+        "contactPersonFirstName": {
+          "type": "string",
+          "description": "The first name of the contact person for this inquiry."
+        },
+        "contactPersonLastName": {
+          "type": "string",
+          "description": "The last name of the contact person for this inquiry."
+        },
+        "contactPersonEmail": {
+          "type": "string",
+          "description": "The email address of the contact person.",
+          "format": "email"
+        },
+        "contactPersonPhone": {
+          "type": "string",
+          "description": "The phone number of the contact person."
+        },
+        "inquiryDate": {
+          "type": "string",
+          "description": "The date and time when the compliance inquiry was submitted.",
+          "format": "date-time"
+        },
+        "status": {
+          "type": "string",
+          "description": "The processing status of the inquiry (e.g., 'New', 'Contacted', 'Converted')."
+        }
+      },
+      "required": [
+        "id",
+        "industryType",
+        "numberOfEmployees",
+        "inquiryDetails",
+        "recommendedCourseIds",
+        "contactPersonEmail",
+        "inquiryDate",
+        "status"
+      ]
+    }
+  },
+  "auth": {
+    "providers": [
+      "password",
+      "anonymous"
+    ]
+  },
+  "firestore": {
+    "structure": [
+      {
+        "path": "/userProfiles/{userId}",
+        "definition": {
+          "entityName": "UserProfile",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "Stores individual user profile data. Each document's ID is the Firebase Authentication UID of the user. Accessible only by the owner (matching userId) and administrators.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique Firebase Authentication UID of the user."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/organizations/{organizationId}",
+        "definition": {
+          "entityName": "Organization",
+          "schema": {
+            "$ref": "#/backend/entities/Organization"
+          },
+          "description": "Stores details about corporate clients. Includes a 'members' map for role-based authorization (e.g., {uid: 'admin'}). Accessible by organization members with appropriate roles and administrators.",
+          "params": [
+            {
+              "name": "organizationId",
+              "description": "The unique identifier for the Organization."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/courseCategories/{categoryId}",
+        "definition": {
+          "entityName": "CourseCategory",
+          "schema": {
+            "$ref": "#/backend/entities/CourseCategory"
+          },
+          "description": "Defines categories for courses. Publicly readable. Write access for administrators only.",
+          "params": [
+            {
+              "name": "categoryId",
+              "description": "The unique identifier for the CourseCategory."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/courseRoleTags/{tagId}",
+        "definition": {
+          "entityName": "CourseRoleTag",
+          "schema": {
+            "$ref": "#/backend/entities/CourseRoleTag"
+          },
+          "description": "Defines tags for courses based on target roles. Publicly readable. Write access for administrators only.",
+          "params": [
+            {
+              "name": "tagId",
+              "description": "The unique identifier for the CourseRoleTag."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/courses/{courseId}",
+        "definition": {
+          "entityName": "Course",
+          "schema": {
+            "$ref": "#/backend/entities/Course"
+          },
+          "description": "Stores details for each training course. Publicly readable. Write access for administrators only.",
+          "params": [
+            {
+              "name": "courseId",
+              "description": "The unique identifier for the Course."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/courseSchedules/{scheduleId}",
+        "definition": {
+          "entityName": "CourseSchedule",
+          "schema": {
+            "$ref": "#/backend/entities/CourseSchedule"
+          },
+          "description": "Stores specific scheduled instances of public training courses. Publicly readable. Write access for administrators only.",
+          "params": [
+            {
+              "name": "scheduleId",
+              "description": "The unique identifier for the CourseSchedule."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/registrations/{registrationId}",
+        "definition": {
+          "entityName": "Registration",
+          "schema": {
+            "$ref": "#/backend/entities/Registration"
+          },
+          "description": "Records participant enrollments. Includes denormalized 'organizationAdminUids' (list of UIDs) for authorization independence if associated with an organization. Accessible by the 'participantId', organizational admins, and system administrators.",
+          "params": [
+            {
+              "name": "registrationId",
+              "description": "The unique identifier for the Registration."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/invoices/{invoiceId}",
+        "definition": {
+          "entityName": "Invoice",
+          "schema": {
+            "$ref": "#/backend/entities/Invoice"
+          },
+          "description": "Stores details for payment invoices. Includes denormalized 'organizationAdminUids' (list of UIDs) for authorization independence if associated with an organization. Accessible by the 'billToUserProfileId', organizational admins, and system administrators.",
+          "params": [
+            {
+              "name": "invoiceId",
+              "description": "The unique identifier for the Invoice."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/requestsForQuote/{quoteId}",
+        "definition": {
+          "entityName": "RequestForQuote",
+          "schema": {
+            "$ref": "#/backend/entities/RequestForQuote"
+          },
+          "description": "Records requests for custom in-house training. Schema enhanced with 'submittedByUid: string | null'. Includes denormalized 'organizationAdminUids' (list of UIDs) for authorization independence if associated with an organization. Accessible by 'submittedByUid', organizational admins, and system administrators.",
+          "params": [
+            {
+              "name": "quoteId",
+              "description": "The unique identifier for the RequestForQuote."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/articles/{articleId}",
+        "definition": {
+          "entityName": "Article",
+          "schema": {
+            "$ref": "#/backend/entities/Article"
+          },
+          "description": "Stores blog posts and educational articles. Publicly readable. Write access for administrators only.",
+          "params": [
+            {
+              "name": "articleId",
+              "description": "The unique identifier for the Article."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/articleCategories/{categoryId}",
+        "definition": {
+          "entityName": "ArticleCategory",
+          "schema": {
+            "$ref": "#/backend/entities/ArticleCategory"
+          },
+          "description": "Defines categories for articles. Publicly readable. Write access for administrators only.",
+          "params": [
+            {
+              "name": "categoryId",
+              "description": "The unique identifier for the ArticleCategory."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/complianceInquiries/{inquiryId}",
+        "definition": {
+          "entityName": "ComplianceInquiry",
+          "schema": {
+            "$ref": "#/backend/entities/ComplianceInquiry"
+          },
+          "description": "Records inquiries from the AI Compliance Checker Tool. Accessible by system administrators only.",
+          "params": [
+            {
+              "name": "inquiryId",
+              "description": "The unique identifier for the ComplianceInquiry."
+            }
+          ]
+        }
+      },
+      {
+        "path": "/roles_admin/{userId}",
+        "definition": {
+          "entityName": "AdminRole",
+          "schema": {
+            "$ref": "#/backend/entities/UserProfile"
+          },
+          "description": "This collection serves as a database-backed access control (DBAC) mechanism. The existence of a document at `/roles_admin/{userId}` grants administrative privileges to the user with the matching UID. Accessible only by system administrators for management, and used by rules to check admin status.",
+          "params": [
+            {
+              "name": "userId",
+              "description": "The unique Firebase Authentication UID of the user who is an administrator."
+            }
+          ]
+        }
+      }
+    ],
+    "reasoning": "The recommended Firestore structure prioritizes **Authorization Independence** and **Structural Segregation** to ensure robust, debuggable security rules and efficient queries. Instead of relying on `get()` calls in security rules to check parent document permissions (which breaks atomicity and complicates debugging), all necessary authorization context is denormalized directly into the child documents. This enables secure and efficient `list` operations (QAPs).\n\n1.  **User-Specific Data:** User profiles are stored at `/userProfiles/{userId}`, where `userId` directly corresponds to `request.auth.uid`. This ensures clear ownership and allows direct path-based authorization. For data directly owned by a user (like personal settings or specific lists tied to their UID), they would typically reside under a subcollection of `/userProfiles/{userId}`. However, entities like `Registration` and `Invoice` are often linked to organizations or can be accessed by specific participants, so they are stored as top-level collections with denormalized authorization fields.\n\n2.  **Organization-Specific Data:** Organizations (`/organizations/{organizationId}`) are designed with a `members` map (`{uid: 'role'}`) for role-based access control. This map is crucial for allowing designated organizational users (e.g., HR managers) to manage their organization's data without needing custom claims. When other entities (`Registration`, `Invoice`, `RequestForQuote`) are associated with an `organizationId`, the relevant `organizationAdminUids` (a simplified denormalization of the 'admin' roles from the `members` map) are copied into those documents. This eliminates the need for `get()` calls to the `Organization` document when authorizing access to its related records.\n\n3.  **Public & Global Data:** Core application data like `Courses`, `CourseSchedules`, `CourseCategories`, `CourseRoleTags`, `Articles`, and `ArticleCategories` are placed in top-level collections with a public read security posture, allowing unauthenticated users to browse content efficiently. Write access is restricted to administrators. This separation of public and private data (`Structural Segregation`) simplifies rules significantly.\n\n4.  **Lead-Generation Entities:** `RequestForQuote` and `ComplianceInquiry` are treated as lead-generation entities. `RequestForQuote` is enhanced with a `submittedByUid` field (if submitted by a logged-in user) and denormalized `organizationAdminUids` (if linked to an organization) to allow relevant parties to view its status. `ComplianceInquiry` is primarily an admin-managed entity due to its sensitive nature and lack of direct user ownership in the provided schema.\n\n5.  **Admin Roles (DBAC):** A dedicated collection `/roles_admin/{userId}` is used to define administrative users. The existence of a document at this path for a given `request.auth.uid` grants admin privileges. This is a simple and effective Database-Backed Access Control (DBAC) mechanism.\n\n**QAP Compliance (Rules are not Filters):**\n*   **Public Data:** For publicly readable collections (e.g., `/courses`, `/articles`), `list` operations are inherently QAP-compliant as no `request.auth.uid`-based filtering is required by the rules.\n*   **User/Organization-Specific Data:** For collections like `/registrations`, `/invoices`, and `/requestsForQuote`:\n    *   Users can `list` their own records by querying `where('participantId', '==', request.auth.uid)` or `where('billToUserProfileId', '==', request.auth.uid)`. The security rules will enforce that `request.auth.uid` matches the `participantId` or `billToUserProfileId` present in the document data, ensuring only authorized records are returned.\n    *   Organizational admins can `list` records relevant to their organization by querying `where('organizationAdminUids', 'array-contains', request.auth.uid)`. The denormalized `organizationAdminUids` field allows the rules to directly check membership without additional reads, thus satisfying QAPs.\n\nThis design minimizes rule complexity, eliminates costly and insecure `get()` calls in rules, and supports scalable, filterable queries for authenticated users and organizations."
+  }
+}

@@ -1,0 +1,40 @@
+Firestore Instance ID
+(default)
+Firestore Instance Location
+asia-southeast1
+Authentication Type
+UsernamePassword
+SMTP connection URI (Optional)
+smtps://admin%40netenergy-tech.com:uwaadustuununebd@smtp.gmail.com:465
+SMTP password (Optional)
+Parameter not set
+OAuth2 SMTP Host (Optional)
+Parameter not set
+OAuth2 SMTP Port (Optional)
+465
+Use secure OAuth2 connection? (Optional)
+true
+OAuth2 Client ID (Optional)
+Parameter not set
+OAuth2 Client Secret (Optional)
+Parameter not set
+OAuth2 Refresh Token (Optional)
+Parameter not set
+OAuth2 SMTP User (Optional)
+Parameter not set
+Email documents collection
+mail
+Default FROM address
+admin@netenergy-tech.com
+Default REPLY-TO address (Optional)
+Parameter not set
+Users collection (Optional)
+Parameter not set
+Templates collection (Optional)
+Parameter not set
+Firestore TTL type
+never
+Firestore TTL value
+1
+TLS Options (Optional)
+Parameter not set
