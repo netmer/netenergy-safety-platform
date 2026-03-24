@@ -2,34 +2,34 @@
 
 import React, { useState, useMemo, useTransition, useEffect } from 'react';
 import type { TrainingSchedule, Course, CourseCategory, AttendeeData, TrainingRecord, RegistrationFormField, AttendeeStatus, AttendeeAttendanceStatus } from '@/lib/course-data';
-import Image from 'next/image';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
-    MoreHorizontal, Clock, BookCheck, ShieldCheck, XCircle, UserRound, UserRoundX,
-    CalendarClock, Loader2, PlusCircle, Filter, Building, Users, Download,
-    History, MapPin, Edit3, UserCheck, Calendar, FileText, User, ScanLine, Printer, CheckCircle, CreditCard
+    Clock, BookCheck, ShieldCheck, XCircle, UserRound, UserRoundX,
+    CalendarClock, Loader2, PlusCircle, Building, Users, Download,
+    History, Edit3, UserCheck, Calendar, User, Printer, CreditCard,
+    CheckCircle2, TrendingUp, UserPlus, ChevronDown
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
-import { collection, query, where, doc, getDocs, orderBy, updateDoc, addDoc, setDoc } from 'firebase/firestore';
+import { collection, query, where, doc, orderBy, updateDoc, addDoc, writeBatch } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { CourseFilters } from '@/components/erp/course-filters';
 import { useToast } from '@/hooks/use-toast';
 import { CaregiverSelect } from '@/components/erp/caregiver-select';
 import { EditAttendeeModal } from '@/components/erp/edit-attendee-modal';
+import { AddWalkinAttendeeModal } from '@/components/erp/add-walkin-attendee-modal';
 
 type StatusFilter = 'all' | 'pending' | 'verified';
 
@@ -46,9 +46,9 @@ const attendanceStatusConfig: Record<AttendeeAttendanceStatus, { label: string; 
     not_checked_in: { label: 'ยังไม่เช็คชื่อ', icon: CalendarClock, badgeClass: 'bg-slate-100 text-slate-800 border-slate-200 border-dashed' },
 };
 
-export function AttendeeManagementClientPage({ schedules, courses, categories, registrations }: { 
-    schedules: TrainingSchedule[], 
-    courses: Course[], 
+export function AttendeeManagementClientPage({ schedules, courses, categories, registrations }: {
+    schedules: TrainingSchedule[],
+    courses: Course[],
     categories: CourseCategory[],
     registrations?: { id: string; formSchema: RegistrationFormField[] }[]
 }) {
@@ -71,8 +71,15 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
     const [editingRecord, setEditingRecord] = useState<TrainingRecord | null>(null);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
+    // Walk-in Modal State
+    const [isWalkinModalOpen, setIsWalkinModalOpen] = useState(false);
+
     // Smart Card Reader State
     const [isReadingCard, setIsReadingCard] = useState<string | null>(null);
+
+    // Bulk Selection State
+    const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [isBulkPending, startBulkTransition] = useTransition();
 
     // Queries
     const recordsQuery = useMemoFirebase(() => {
@@ -99,9 +106,20 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         const searchLower = searchQuery.toLowerCase();
         return records.filter(r =>
             r.attendeeName.toLowerCase().includes(searchLower) ||
-            r.companyName.toLowerCase().includes(searchLower)
+            r.companyName.toLowerCase().includes(searchLower) ||
+            (r.attendeeId && r.attendeeId.includes(searchQuery))
         );
     }, [records, searchQuery]);
+
+    // Summary stats
+    const stats = useMemo(() => ({
+        total: records.length,
+        present: records.filter(r => r.attendance === 'present').length,
+        absent: records.filter(r => r.attendance === 'absent').length,
+        notChecked: records.filter(r => r.attendance === 'not_checked_in').length,
+        completed: records.filter(r => r.status === 'completed').length,
+        walkin: records.filter(r => (r as any).isWalkIn).length,
+    }), [records]);
 
     const selectedScheduleDetails = useMemo(() => {
         if (scheduleFilter === 'all') return null;
@@ -119,6 +137,11 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
             setCaregiverIds([]);
         }
     }, [selectedScheduleDetails]);
+
+    // Clear selection when schedule changes
+    useEffect(() => {
+        setSelectedIds(new Set());
+    }, [scheduleFilter]);
 
     const logHistory = async (action: string, detail: string) => {
         if (!firestore || scheduleFilter === 'all') return;
@@ -141,7 +164,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 await updateDoc(doc(firestore, 'trainingSchedules', scheduleFilter), { caregiverIds });
                 await logHistory('กำหนดผู้ดูแลหลัก', `ตั้งผู้ดูแลประสานงานใหม่จำนวน ${caregiverIds.length} คน`);
                 setEditingCaregiver(false);
-                toast({ title: 'บันทึกสำเร็จ', description: 'กำหนดผู้ดูแลประจำวันแล้ว' });
+                toast({ title: 'บันทึกสำเร็จ', description: 'กำหนดผู้ดูแลประจำคลาสแล้ว' });
             } catch (e: any) {
                 toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });
             }
@@ -158,7 +181,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 let actionName = 'อัปเดตข้อมูล';
                 let valueLabel = String(value);
                 if (field === 'attendance') {
-                    actionName = 'เช็คชื่อมาเรียน';
+                    actionName = 'เช็คชื่อ';
                     valueLabel = attendanceStatusConfig[value as AttendeeAttendanceStatus]?.label || String(value);
                 } else if (field === 'status') {
                     actionName = 'อัปเดตสถานะ';
@@ -167,42 +190,89 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 else if (field === 'postTestScore') actionName = 'อัปเดตคะแนน Post-test';
 
                 await logHistory(actionName, `อัปเดต [${attendeeName}] เป็น "${valueLabel}"`);
-                toast({ title: 'บันทึกสำเร็จ', description: `อัปเดต ${actionName} เรียบร้อยแล้ว` });
+                toast({ title: 'บันทึกสำเร็จ', description: `${actionName} เรียบร้อยแล้ว` });
             } catch (e: any) {
                 toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });
             }
         });
     };
 
+    // Bulk attendance update
+    const handleBulkAttendance = (attendanceValue: AttendeeAttendanceStatus) => {
+        if (!firestore || selectedIds.size === 0) return;
+        startBulkTransition(async () => {
+            try {
+                const batch = writeBatch(firestore);
+                selectedIds.forEach(id => {
+                    batch.update(doc(firestore, 'trainingRecords', id), { attendance: attendanceValue });
+                });
+                await batch.commit();
+                const label = attendanceStatusConfig[attendanceValue]?.label || attendanceValue;
+                await logHistory('เช็คชื่อหมู่', `เช็คชื่อ "${label}" สำหรับผู้อบรม ${selectedIds.size} คนพร้อมกัน`);
+                toast({ title: 'บันทึกสำเร็จ', description: `เช็คชื่อ "${label}" จำนวน ${selectedIds.size} คน` });
+                setSelectedIds(new Set());
+            } catch (e: any) {
+                toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });
+            }
+        });
+    };
+
+    // Bulk Grade (status) update
+    const handleBulkStatus = (statusValue: AttendeeStatus) => {
+        if (!firestore || selectedIds.size === 0) return;
+        startBulkTransition(async () => {
+            try {
+                const batch = writeBatch(firestore);
+                selectedIds.forEach(id => {
+                    batch.update(doc(firestore, 'trainingRecords', id), { status: statusValue });
+                });
+                await batch.commit();
+                const label = attendeeStatusConfig[statusValue]?.label || statusValue;
+                await logHistory('อัปเดตสถานะหมู่', `เปลี่ยนสถานะเป็น "${label}" สำหรับผู้อบรม ${selectedIds.size} คน`);
+                toast({ title: 'บันทึกสำเร็จ', description: `เปลี่ยนสถานะ ${selectedIds.size} คน เป็น "${label}"` });
+                setSelectedIds(new Set());
+            } catch (e: any) {
+                toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });
+            }
+        });
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedIds.size === filteredRecords.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredRecords.map(r => r.id)));
+        }
+    };
+
+    const toggleSelect = (id: string) => {
+        const next = new Set(selectedIds);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        setSelectedIds(next);
+    };
+
     const applySmartCardData = async (record: TrainingRecord, data: any) => {
         if (!firestore) return;
-
+        const { setDoc } = await import('firebase/firestore');
         const fullName = `${data.titleTH || ''}${data.firstNameTH || ''} ${data.lastNameTH || ''}`.trim();
-
         startTransition(async () => {
             try {
-                // Update training record
                 const recordRef = doc(firestore, 'trainingRecords', record.id);
-                // Also update the `attendees` master DB directly
                 const attendeeRef = doc(firestore, 'attendees', data.citizenId);
-
-                // Attendance = Present
                 await updateDocumentNonBlocking(recordRef, {
                     attendance: 'present',
                     attendeeId: data.citizenId,
                     attendeeName: fullName || record.attendeeName,
                     dateOfBirth: data.dob || null
                 });
-
-                // Update Master Attendee Info
                 await setDoc(attendeeRef, {
                     attendeeId: data.citizenId,
                     fullName: fullName || record.attendeeName,
                     dateOfBirth: data.dob || null
                 }, { merge: true });
-
-                await logHistory('อ่านบัตร Smart Card', `เสียบบัตร ปชช. ${data.citizenId} เช็คชื่อ [${fullName}] และดึงข้อมูลส่วนตัวสำเร็จ`);
-                toast({ title: 'อ่านบัตร ปชช. สำเร็จ', description: `เช็คชื่อ "มาเรียน" และซิงค์ประวัติของ ${fullName} อัตโนมัติ` });
+                await logHistory('อ่านบัตร Smart Card', `เสียบบัตร ปชช. ${data.citizenId} เช็คชื่อ [${fullName}]`);
+                toast({ title: 'อ่านบัตร ปชช. สำเร็จ', description: `เช็คชื่อ "มาเรียน" ของ ${fullName}` });
             } catch (e: any) {
                 toast({ variant: 'destructive', title: 'จัดเก็บข้อมูลล้มเหลว', description: e.message });
             } finally {
@@ -215,12 +285,10 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         toast({ title: 'กำลังเชื่อมต่อเครื่องอ่าน...', description: 'กรุณาเสียบบัตรประชาชน (Smart Card) ค้างไว้', duration: 4000 });
         setIsReadingCard(record.id);
         try {
-            // โลจิกจริง: ยิง Fetch ไปยัง Localhost Web Service ที่รันอยู่เพื่อดึงข้อมูลจากเครื่องเสียบบัตร
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 2000);
             const response = await fetch('http://localhost:8181/api/smartcard/read', { method: 'GET', signal: controller.signal });
             clearTimeout(timeoutId);
-
             if (response.ok) {
                 const data = await response.json();
                 await applySmartCardData(record, data);
@@ -228,19 +296,14 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 throw new Error("Local smart card agent returned error");
             }
         } catch (e) {
-            // Fallback จำลองข้อมูลหากไม่มีเครื่องอ่านบัตรเสียบอยู่ (สำหรับการพรีเซนต์/Demo)
             setTimeout(() => {
                 const mockData = {
                     citizenId: "1100000000001",
                     titleTH: "นาย",
-                    firstNameTH: "สมชาย",
-                    lastNameTH: "รักดี",
+                    firstNameTH: record.attendeeName.split(' ')[0] || "สมชาย",
+                    lastNameTH: record.attendeeName.split(' ')[1] || "รักดี",
                     dob: "1985-12-10"
                 };
-                if (!record.attendeeId) {
-                    mockData.firstNameTH = record.attendeeName.split(' ')[0] || "สมชาย";
-                    mockData.lastNameTH = record.attendeeName.split(' ')[1] || "รักดี";
-                }
                 applySmartCardData(record, mockData);
             }, 1000);
         }
@@ -248,18 +311,19 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
 
     const exportToCSV = () => {
         if (filteredRecords.length === 0) return;
-
-        const headers = ["ลำดับ", "ชื่อ-นามสกุล", "บริษัท", "การเข้าเรียน", "สถานะอบรม", "คะแนน Pre-test", "คะแนน Post-test"];
+        const headers = ["ลำดับ", "ชื่อ-นามสกุล", "เลขบัตรประชาชน", "บริษัท", "Walk-in", "การเข้าเรียน", "สถานะอบรม", "คะแนน Pre-test", "คะแนน Post-test", "เลขที่ใบสมัคร"];
         const rows = filteredRecords.map((r, index) => [
             index + 1,
             `"${r.attendeeName}"`,
+            r.attendeeId || '-',
             `"${r.companyName}"`,
+            (r as any).isWalkIn ? 'Walk-in' : '-',
             attendanceStatusConfig[r.attendance]?.label || r.attendance,
             attendeeStatusConfig[r.status]?.label || r.status,
             r.preTestScore || '-',
-            r.postTestScore || '-'
+            r.postTestScore || '-',
+            r.registrationId.slice(0, 12),
         ]);
-
         const csvContent = "\uFEFF" + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
@@ -269,14 +333,22 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-
-        logHistory('ดาวน์โหลดรายงาน', `Export ข้อมูลผู้อบรมลงไฟล์ CSV จำนวน ${filteredRecords.length} คน`);
-        toast({ title: 'ดาวน์โหลดสำเร็จ', description: 'สร้างไฟล์รายงาน CSV เรียบร้อยแล้ว' });
+        logHistory('ดาวน์โหลดรายงาน', `Export CSV ${filteredRecords.length} คน`);
+        toast({ title: 'ดาวน์โหลดสำเร็จ', description: 'สร้างไฟล์ CSV เรียบร้อยแล้ว' });
     };
+
+    // Stat card subcomponent
+    const StatCard = ({ label, value, color, icon: Icon }: { label: string; value: number; color: string; icon: React.ElementType }) => (
+        <div className={cn("flex flex-col items-center justify-center p-4 rounded-2xl border gap-1", color)}>
+            <Icon className="w-5 h-5 mb-1 opacity-80" />
+            <span className="text-2xl font-black font-mono leading-none">{value}</span>
+            <span className="text-[10px] font-bold uppercase tracking-widest opacity-70 text-center leading-tight">{label}</span>
+        </div>
+    );
 
     return (
         <div className="space-y-6 pb-20">
-            {/* Top Bar Navigation / Filter */}
+            {/* Top Bar */}
             <div className="flex flex-col gap-4 text-left">
                 <div>
                     <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">จัดการข้อมูลผู้อบรมประจำวัน</h1>
@@ -305,19 +377,19 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                 <div className="flex flex-wrap items-center gap-3 text-sm">
                                     <span className="flex items-center gap-1.5 text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl font-semibold"><Calendar className="w-4 h-4" /> {selectedScheduleDetails?.startDate ? format(new Date(selectedScheduleDetails.startDate), 'd MMM yyyy', { locale: th }) : ''}</span>
                                     <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl font-semibold"><Users className="w-4 h-4" /> ผู้อบรม {records.length} คน</span>
-                                    <span className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl font-semibold"><Building className="w-4 h-4" /> ข้อมูลจาก {new Set(records.map(a => a.companyName)).size} บริษัท</span>
+                                    <span className="flex items-center gap-1.5 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-xl font-semibold"><Building className="w-4 h-4" /> {new Set(records.map(a => a.companyName)).size} บริษัท</span>
+                                    {stats.walkin > 0 && <span className="flex items-center gap-1.5 text-violet-600 bg-violet-50 px-3 py-1.5 rounded-xl font-semibold"><UserPlus className="w-4 h-4" /> Walk-in {stats.walkin} คน</span>}
                                 </div>
-                                <div className="flex items-center gap-3 mt-4 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 shadow-sm max-w-fit">
+                                {/* Caregiver */}
+                                <div className="flex items-center gap-3 mt-2 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-100 shadow-sm max-w-fit">
                                     <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0">
                                         <UserCheck className="w-4 h-4" />
                                     </div>
                                     <div className="flex-1">
-                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ผู้ดูแลประจำคลาส (Caregiver)</div>
+                                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ผู้ดูแลประจำคลาส</div>
                                         {editingCaregiver ? (
                                             <div className="flex items-center gap-2 mt-1 relative z-[50]">
-                                                <div className="w-[300px]">
-                                                    <CaregiverSelect value={caregiverIds} onChange={setCaregiverIds} />
-                                                </div>
+                                                <div className="w-[300px]"><CaregiverSelect value={caregiverIds} onChange={setCaregiverIds} /></div>
                                                 <Button size="sm" onClick={handleSaveCaregiver} disabled={isPending} className="h-8 shadow-sm">บันทึก</Button>
                                                 <Button size="sm" variant="ghost" onClick={() => setEditingCaregiver(false)} className="h-8">ยกเลิก</Button>
                                             </div>
@@ -330,7 +402,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                         ))}
                                                     </div>
                                                 ) : (
-                                                    <span className="font-semibold text-sm text-slate-700 dark:text-slate-200">ไม่พบข้อมูล หรือ ยังไม่ได้ระบุทีมดูแล</span>
+                                                    <span className="font-semibold text-sm text-slate-700 dark:text-slate-200">ยังไม่ได้ระบุทีมดูแล</span>
                                                 )}
                                                 <Button variant="ghost" size="icon" className="w-6 h-6 rounded-full hover:bg-slate-100" onClick={() => setEditingCaregiver(true)}>
                                                     <Edit3 className="w-3 h-3 text-slate-400" />
@@ -342,21 +414,71 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                             </div>
                             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
                                 <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-slate-200" onClick={() => setShowHistoryDialog(true)}>
-                                    <History className="w-4 h-4 mr-2" /> ประวัติการจัดการ
+                                    <History className="w-4 h-4 mr-2" /> ประวัติ
                                 </Button>
                                 <Button className="rounded-xl font-bold shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white h-11" onClick={exportToCSV}>
                                     <Download className="w-4 h-4 mr-2" /> Export CSV
                                 </Button>
+                                <Button
+                                    className="rounded-xl font-bold shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white h-11"
+                                    onClick={() => setIsWalkinModalOpen(true)}
+                                >
+                                    <UserPlus className="w-4 h-4 mr-2" /> เพิ่ม Walk-in
+                                </Button>
                             </div>
                         </CardHeader>
+
+                        {/* Stats Bar */}
+                        <div className="px-8 py-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50">
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
+                                <StatCard label="ผู้อบรมทั้งหมด" value={stats.total} color="bg-white border-slate-200 text-slate-700" icon={Users} />
+                                <StatCard label="มาเรียน" value={stats.present} color="bg-emerald-50 border-emerald-200 text-emerald-700" icon={UserRound} />
+                                <StatCard label="ขาดเรียน" value={stats.absent} color="bg-rose-50 border-rose-200 text-rose-700" icon={UserRoundX} />
+                                <StatCard label="รอเช็คชื่อ" value={stats.notChecked} color="bg-amber-50 border-amber-200 text-amber-700" icon={CalendarClock} />
+                                <StatCard label="ผ่านการอบรม" value={stats.completed} color="bg-green-50 border-green-200 text-green-700" icon={ShieldCheck} />
+                            </div>
+                        </div>
+
                         <CardContent className="p-0 bg-slate-50/50 dark:bg-slate-950/50">
+                            {/* Bulk Action Toolbar */}
+                            {selectedIds.size > 0 && (
+                                <div className="px-8 py-3 bg-indigo-50 border-b border-indigo-100 flex flex-wrap items-center gap-3">
+                                    <span className="font-bold text-indigo-700 text-sm flex items-center gap-2">
+                                        <CheckCircle2 className="w-4 h-4" />เลือกแล้ว {selectedIds.size} คน
+                                    </span>
+                                    <div className="flex items-center gap-2 flex-wrap ml-2">
+                                        <Button size="sm" className="h-8 rounded-lg font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm" onClick={() => handleBulkAttendance('present')} disabled={isBulkPending}>
+                                            {isBulkPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <UserRound className="w-3 h-3 mr-1" />}
+                                            มาทั้งหมด
+                                        </Button>
+                                        <Button size="sm" className="h-8 rounded-lg font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-sm" onClick={() => handleBulkAttendance('absent')} disabled={isBulkPending}>
+                                            {isBulkPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <UserRoundX className="w-3 h-3 mr-1" />}
+                                            ขาดทั้งหมด
+                                        </Button>
+                                        <Button size="sm" className="h-8 rounded-lg font-bold bg-green-500 hover:bg-green-600 text-white shadow-sm" onClick={() => handleBulkStatus('completed')} disabled={isBulkPending}>
+                                            <ShieldCheck className="w-3 h-3 mr-1" /> ผ่านอบรม
+                                        </Button>
+                                        <Button size="sm" variant="outline" className="h-8 rounded-lg font-bold text-slate-500" onClick={() => setSelectedIds(new Set())}>
+                                            ยกเลิกการเลือก
+                                        </Button>
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Data Grid */}
                             <div className="overflow-x-auto custom-scrollbar">
-                                <Table className="min-w-[1100px]">
+                                <Table className="min-w-[1200px]">
                                     <TableHeader className="bg-white dark:bg-slate-900 border-y">
                                         <TableRow className="hover:bg-transparent shadow-sm">
-                                            <TableHead className="py-5 pl-8 uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[300px]">ชื่อผู้อบรม / บริษัท</TableHead>
-                                            <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[250px]">เช็คชื่อรายวัน</TableHead>
+                                            <TableHead className="py-5 pl-6 w-[50px]">
+                                                <Checkbox
+                                                    checked={filteredRecords.length > 0 && selectedIds.size === filteredRecords.length}
+                                                    onCheckedChange={toggleSelectAll}
+                                                    aria-label="เลือกทั้งหมด"
+                                                />
+                                            </TableHead>
+                                            <TableHead className="py-5 uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[280px]">ชื่อผู้อบรม / บริษัท</TableHead>
+                                            <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[260px]">เช็คชื่อรายวัน</TableHead>
                                             <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[200px]">การตรวจสอบ (Docs)</TableHead>
                                             <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold text-center w-[200px]">คะแนน (Pre / Post)</TableHead>
                                             <TableHead className="text-right pr-8 uppercase tracking-widest text-[11px] text-slate-400 font-bold">เพิ่มเติม</TableHead>
@@ -364,15 +486,39 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                     </TableHeader>
                                     <TableBody>
                                         {isLoading ? (
-                                            <TableRow><TableCell colSpan={5} className="h-64 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-50" /></TableCell></TableRow>
+                                            <TableRow><TableCell colSpan={6} className="h-64 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-50" /></TableCell></TableRow>
                                         ) : filteredRecords.length > 0 ? filteredRecords.map((record) => (
-                                            <TableRow key={record.id} className="hover:bg-white dark:hover:bg-slate-900 transition-colors group">
-                                                <TableCell className="py-6 pl-8 text-left">
-                                                    <div className="font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors">{record.attendeeName}</div>
-                                                    <div className="text-[11px] text-muted-foreground font-medium uppercase mt-1 flex items-center gap-1.5">
-                                                        <Building className="w-3 h-3" /> {record.companyName}
-                                                        <span className="text-slate-300 mx-1">|</span>
-                                                        <span className="font-mono">{record.registrationId.slice(0, 6)}</span>
+                                            <TableRow
+                                                key={record.id}
+                                                className={cn(
+                                                    "hover:bg-white dark:hover:bg-slate-900 transition-colors group",
+                                                    selectedIds.has(record.id) ? "bg-indigo-50/60 dark:bg-indigo-950/30" : ""
+                                                )}
+                                            >
+                                                <TableCell className="pl-6">
+                                                    <Checkbox
+                                                        checked={selectedIds.has(record.id)}
+                                                        onCheckedChange={() => toggleSelect(record.id)}
+                                                    />
+                                                </TableCell>
+                                                <TableCell className="py-6 text-left">
+                                                    <div className="flex items-start gap-2">
+                                                        <div>
+                                                            <div className="font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors flex items-center gap-2">
+                                                                {record.attendeeName}
+                                                                {(record as any).isWalkIn && (
+                                                                    <Badge className="text-[9px] bg-violet-100 text-violet-700 border-violet-200 font-bold px-1.5 py-0.5 h-auto">Walk-in</Badge>
+                                                                )}
+                                                            </div>
+                                                            <div className="text-[11px] text-muted-foreground font-medium uppercase mt-1 flex items-center gap-1.5">
+                                                                <Building className="w-3 h-3" /> {record.companyName}
+                                                                <span className="text-slate-300 mx-1">|</span>
+                                                                <span className="font-mono">{record.registrationId.slice(0, 6)}</span>
+                                                            </div>
+                                                            {record.attendeeId && (
+                                                                <div className="text-[10px] text-slate-400 font-mono mt-0.5">{record.attendeeId}</div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-left">
@@ -393,7 +539,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                                 >
                                                                     {status === 'present' ? 'มา' : status === 'absent' ? 'ขาด' : 'รอ'}
                                                                 </button>
-                                                            )
+                                                            );
                                                         })}
                                                     </div>
                                                 </TableCell>
@@ -412,22 +558,20 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                 <TableCell className="text-center">
                                                     <div className="flex items-center justify-center gap-2">
                                                         <div className="flex flex-col gap-1 items-center">
-                                                            <Label className="text-[9px] text-slate-400 uppercase font-bold tracking-widest hidden group-hover:block transition-all absolute -mt-4 bg-white px-1 shadow-sm rounded">Pre</Label>
                                                             <Input
                                                                 defaultValue={record.preTestScore || ''}
                                                                 onBlur={e => handleUpdateInline(record.id, 'preTestScore', e.target.value, record.attendeeName)}
                                                                 className="h-9 w-16 text-center rounded-xl font-bold bg-slate-50 border-slate-200 focus:bg-white"
-                                                                placeholder="-"
+                                                                placeholder="Pre"
                                                             />
                                                         </div>
                                                         <span className="text-slate-300 font-light">/</span>
                                                         <div className="flex flex-col gap-1 items-center">
-                                                            <Label className="text-[9px] text-slate-400 uppercase font-bold tracking-widest hidden group-hover:block transition-all absolute -mt-4 bg-white px-1 shadow-sm rounded">Post</Label>
                                                             <Input
                                                                 defaultValue={record.postTestScore || ''}
                                                                 onBlur={e => handleUpdateInline(record.id, 'postTestScore', e.target.value, record.attendeeName)}
                                                                 className="h-9 w-16 text-center rounded-xl font-bold bg-slate-50 border-slate-200 focus:bg-white text-emerald-600"
-                                                                placeholder="-"
+                                                                placeholder="Post"
                                                             />
                                                         </div>
                                                     </div>
@@ -448,10 +592,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                                 <Printer className="w-3.5 h-3.5 mr-1" /> ใบเซอร์
                                                             </Button>
                                                         )}
-                                                        <Button variant="secondary" size="sm" className="h-8 rounded-lg font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 px-2" onClick={() => {
-                                                            setEditingRecord(record);
-                                                            setIsEditModalOpen(true);
-                                                        }}>
+                                                        <Button variant="secondary" size="sm" className="h-8 rounded-lg font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 px-2" onClick={() => { setEditingRecord(record); setIsEditModalOpen(true); }}>
                                                             <Edit3 className="w-3.5 h-3.5 mr-1" /> แก้ไข
                                                         </Button>
                                                     </div>
@@ -459,7 +600,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                             </TableRow>
                                         )) : (
                                             <TableRow>
-                                                <TableCell colSpan={5} className="h-64 text-center">
+                                                <TableCell colSpan={6} className="h-64 text-center">
                                                     <div className="flex flex-col items-center justify-center opacity-40">
                                                         <Users className="w-12 h-12 mb-4 text-slate-400" />
                                                         <p className="font-bold">ไม่พบข้อมูลผู้อบรม</p>
@@ -523,6 +664,13 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 onClose={() => setIsEditModalOpen(false)}
                 record={editingRecord}
                 onSuccess={() => setIsEditModalOpen(false)}
+            />
+
+            <AddWalkinAttendeeModal
+                isOpen={isWalkinModalOpen}
+                onClose={() => setIsWalkinModalOpen(false)}
+                schedule={selectedScheduleDetails as any}
+                onSuccess={() => setIsWalkinModalOpen(false)}
             />
         </div>
     );

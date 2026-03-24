@@ -20,7 +20,7 @@ export default async function ManageAttendeesPage() {
     const schedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainingSchedule));
     const courses = coursesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Course));
     const categories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CourseCategory));
-    
+
     // We only need the formSchema from each registration, not the full data.
     const registrations = registrationsSnapshot.docs.map(doc => {
         const data = doc.data();
@@ -30,7 +30,7 @@ export default async function ManageAttendeesPage() {
         }
     });
 
-    return <AttendeeManagementClientPage 
+    return <AttendeeManagementClientPage
         schedules={schedules}
         courses={courses}
         categories={categories}

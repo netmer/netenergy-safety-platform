@@ -20,7 +20,7 @@ import {
     MoreHorizontal, Trash2, Loader2, CheckCircle, Clock, XCircle, Edit, Users, 
     UserCheck, CalendarPlus, Building, Calendar, FileText, FileSignature, Filter, 
     ExternalLink, GraduationCap, Info, MapPin, CreditCard, Printer, History, 
-    AlertTriangle, DatabaseZap, User, Search, ChevronRight, CornerDownRight
+    AlertTriangle, DatabaseZap, User, Search, ChevronRight, CornerDownRight, RotateCcw
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { 
@@ -459,70 +459,105 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
 
                                 {/* ATTENDEES TAB */}
                                 <TabsContent value="attendees" className="flex-1 overflow-y-auto custom-scrollbar p-8 mt-0 outline-none">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h3 className="text-xl font-bold font-headline flex items-center gap-2"><Users className="w-5 h-5 text-primary"/> จัดการสถานะผู้อบรม</h3>
-                                        <div className="flex gap-2">
-                                            {selectedAttendeeIds.size > 0 && (
-                                                <>
-                                                    <Button size="sm" variant="outline" className="h-9 rounded-xl font-bold text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, Array.from(selectedAttendeeIds), 'confirmed')} disabled={processingId === selectedRegistration.id}>อนุมัติที่เลือก ({selectedAttendeeIds.size})</Button>
-                                                    <Button size="sm" variant="outline" className="h-9 rounded-xl font-bold text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => { setRescheduleAttendeeIds(Array.from(selectedAttendeeIds)); setReschedulingRegistration(selectedRegistration); }}>เลื่อนรอบที่เลือก ({selectedAttendeeIds.size})</Button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="border rounded-2xl overflow-hidden shadow-sm bg-white dark:bg-slate-900">
-                                        <Table>
-                                            <TableHeader className="bg-slate-50 dark:bg-slate-950/50">
-                                                <TableRow>
-                                                    <TableHead className="w-[50px] text-center"><Checkbox onCheckedChange={(c) => {
-                                                        const attendeesList = (selectedRegistration.formData[selectedRegistration.formSchema.find(f => f.type === 'attendee_list')?.id || ''] || []) as RegistrationAttendee[];
-                                                        if (c) setSelectedAttendeeIds(new Set(attendeesList.map(a => a.id)));
-                                                        else setSelectedAttendeeIds(new Set());
-                                                    }}/></TableHead>
-                                                    <TableHead className="font-bold">ชื่อ-นามสกุล / สาขา</TableHead>
-                                                    <TableHead className="font-bold">สถานะ</TableHead>
-                                                    <TableHead className="text-right pr-6 font-bold">ดำเนินการรายบุคคล</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                            <TableBody>
-                                                {(() => {
-                                                    const attendeeListField = selectedRegistration.formSchema.find(f => f.type === 'attendee_list');
-                                                    if (!attendeeListField) return <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground italic">ไม่พบฟิลด์รายชื่อผู้อบรม</TableCell></TableRow>;
-                                                    const attendees = (selectedRegistration.formData[attendeeListField.id] || []) as RegistrationAttendee[];
-                                                    const fullNameFieldId = attendeeListField.subFields?.find(sf => sf.label.includes("ชื่อ"))?.id;
-                                                    
-                                                    if (attendees.length === 0) return <TableRow><TableCell colSpan={4} className="text-center py-10">ยังไม่มีรายชื่อ</TableCell></TableRow>;
+                                    {(() => {
+                                        const attendeeListField = selectedRegistration.formSchema.find(f => f.type === 'attendee_list');
+                                        const attendees = attendeeListField ? (selectedRegistration.formData[attendeeListField.id] || []) as RegistrationAttendee[] : [];
+                                        const pendingCount = attendees.filter(a => a.status === 'pending').length;
+                                        const confirmedCount = attendees.filter(a => a.status === 'confirmed').length;
+                                        const postponedCount = attendees.filter(a => a.status === 'postponed').length;
+                                        const cancelledCount = attendees.filter(a => a.status === 'cancelled').length;
+                                        const fullNameFieldId = attendeeListField?.subFields?.find(sf => sf.label.includes("ชื่อ"))?.id;
 
-                                                    return attendees.map(attendee => (
-                                                        <TableRow key={attendee.id} className="hover:bg-slate-50/50 transition-colors">
-                                                            <TableCell className="text-center">
-                                                                <Checkbox 
-                                                                    checked={selectedAttendeeIds.has(attendee.id)}
-                                                                    onCheckedChange={(checked) => {
-                                                                        const newSet = new Set(selectedAttendeeIds);
-                                                                        if (checked) newSet.add(attendee.id);
-                                                                        else newSet.delete(attendee.id);
-                                                                        setSelectedAttendeeIds(newSet);
-                                                                    }}
-                                                                />
-                                                            </TableCell>
-                                                            <TableCell className="text-left py-4">
-                                                                <div className="font-bold text-sm">{fullNameFieldId ? attendee[fullNameFieldId] : 'ผู้อบรม'}</div>
-                                                                <div className="text-xs text-muted-foreground mt-0.5 opacity-70">รหัสบัตร/พาสปอร์ต: {attendee.attendeeId || '-'}</div>
-                                                            </TableCell>
-                                                            <TableCell className="text-left"><AttendeeStatusBadge status={attendee.status} /></TableCell>
-                                                            <TableCell className="text-right pr-6 flex justify-end gap-1 mt-2">
-                                                                <Button variant="ghost" size="sm" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, [attendee.id], 'confirmed')} disabled={processingId === selectedRegistration.id || attendee.status === 'confirmed'} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-green-50 hover:text-green-700">อนุมัติ</Button>
-                                                                <Button variant="ghost" size="sm" onClick={() => { setRescheduleAttendeeIds([attendee.id]); setReschedulingRegistration(selectedRegistration); }} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-blue-50 hover:text-blue-700">เลื่อนรอบ</Button>
-                                                                <Button variant="ghost" size="sm" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, [attendee.id], 'cancelled')} disabled={processingId === selectedRegistration.id || attendee.status === 'cancelled'} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-red-50 hover:text-red-700">ยกเลิก</Button>
-                                                            </TableCell>
-                                                        </TableRow>
-                                                    ));
-                                                })()}
-                                            </TableBody>
-                                        </Table>
-                                    </div>
+                                        return (
+                                            <>
+                                                <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
+                                                    <div>
+                                                        <h3 className="text-xl font-bold font-headline flex items-center gap-2"><Users className="w-5 h-5 text-primary"/> จัดการสถานะผู้อบรม</h3>
+                                                        {attendees.length > 0 && (
+                                                            <div className="flex flex-wrap gap-2 mt-2">
+                                                                {pendingCount > 0 && <span className="text-[11px] font-bold bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">{pendingCount} รออนุมัติ</span>}
+                                                                {confirmedCount > 0 && <span className="text-[11px] font-bold bg-green-100 text-green-700 px-2.5 py-1 rounded-full">{confirmedCount} ยืนยันแล้ว</span>}
+                                                                {postponedCount > 0 && <span className="text-[11px] font-bold bg-blue-100 text-blue-700 px-2.5 py-1 rounded-full">{postponedCount} เลื่อนรอบ</span>}
+                                                                {cancelledCount > 0 && <span className="text-[11px] font-bold bg-red-100 text-red-700 px-2.5 py-1 rounded-full">{cancelledCount} ยกเลิก</span>}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {pendingCount > 0 && (
+                                                            <Button size="sm" className="h-9 rounded-xl font-bold bg-green-500 hover:bg-green-600 text-white shadow-sm" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, attendees.filter(a => a.status === 'pending').map(a => a.id), 'confirmed')} disabled={processingId === selectedRegistration.id}>
+                                                                <CheckCircle className="w-3.5 h-3.5 mr-1.5"/>อนุมัติทั้งหมด ({pendingCount} คน)
+                                                            </Button>
+                                                        )}
+                                                        {selectedAttendeeIds.size > 0 && (
+                                                            <>
+                                                                <Button size="sm" variant="outline" className="h-9 rounded-xl font-bold text-green-600 border-green-200 hover:bg-green-50" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, Array.from(selectedAttendeeIds), 'confirmed')} disabled={processingId === selectedRegistration.id}>อนุมัติที่เลือก ({selectedAttendeeIds.size})</Button>
+                                                                <Button size="sm" variant="outline" className="h-9 rounded-xl font-bold text-amber-600 border-amber-200 hover:bg-amber-50" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, Array.from(selectedAttendeeIds), 'pending')} disabled={processingId === selectedRegistration.id}>
+                                                                    <RotateCcw className="w-3.5 h-3.5 mr-1"/>คืนสู่รออนุมัติ
+                                                                </Button>
+                                                                <Button size="sm" variant="outline" className="h-9 rounded-xl font-bold text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => { setRescheduleAttendeeIds(Array.from(selectedAttendeeIds)); setReschedulingRegistration(selectedRegistration); }}>เลื่อนรอบที่เลือก ({selectedAttendeeIds.size})</Button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="border rounded-2xl overflow-hidden shadow-sm bg-white dark:bg-slate-900">
+                                                    <Table>
+                                                        <TableHeader className="bg-slate-50 dark:bg-slate-950/50">
+                                                            <TableRow>
+                                                                <TableHead className="w-[50px] text-center"><Checkbox onCheckedChange={(c) => {
+                                                                    if (c) setSelectedAttendeeIds(new Set(attendees.map(a => a.id)));
+                                                                    else setSelectedAttendeeIds(new Set());
+                                                                }}/></TableHead>
+                                                                <TableHead className="font-bold">ชื่อ-นามสกุล / รหัสบัตร</TableHead>
+                                                                <TableHead className="font-bold">สถานะ</TableHead>
+                                                                <TableHead className="text-right pr-6 font-bold">ดำเนินการรายบุคคล</TableHead>
+                                                            </TableRow>
+                                                        </TableHeader>
+                                                        <TableBody>
+                                                            {attendees.length === 0 ? (
+                                                                <TableRow><TableCell colSpan={4} className="text-center py-10 text-muted-foreground italic">ยังไม่มีรายชื่อผู้อบรม</TableCell></TableRow>
+                                                            ) : attendees.map(attendee => (
+                                                                <TableRow key={attendee.id} className={cn("hover:bg-slate-50/50 transition-colors", selectedAttendeeIds.has(attendee.id) ? 'bg-indigo-50/50' : '')}>
+                                                                    <TableCell className="text-center">
+                                                                        <Checkbox
+                                                                            checked={selectedAttendeeIds.has(attendee.id)}
+                                                                            onCheckedChange={(checked) => {
+                                                                                const newSet = new Set(selectedAttendeeIds);
+                                                                                if (checked) newSet.add(attendee.id);
+                                                                                else newSet.delete(attendee.id);
+                                                                                setSelectedAttendeeIds(newSet);
+                                                                            }}
+                                                                        />
+                                                                    </TableCell>
+                                                                    <TableCell className="text-left py-4">
+                                                                        <div className="font-bold text-sm">{fullNameFieldId ? attendee[fullNameFieldId] : 'ผู้อบรม'}</div>
+                                                                        <div className="text-xs text-muted-foreground mt-0.5 opacity-70">รหัสบัตร: {attendee.attendeeId || '-'}</div>
+                                                                    </TableCell>
+                                                                    <TableCell className="text-left"><AttendeeStatusBadge status={attendee.status} /></TableCell>
+                                                                    <TableCell className="text-right pr-6">
+                                                                        <div className="flex justify-end gap-1">
+                                                                            {attendee.status !== 'confirmed' && (
+                                                                                <Button variant="ghost" size="sm" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, [attendee.id], 'confirmed')} disabled={processingId === selectedRegistration.id} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-green-50 hover:text-green-700">อนุมัติ</Button>
+                                                                            )}
+                                                                            {attendee.status === 'confirmed' && (
+                                                                                <Button variant="ghost" size="sm" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, [attendee.id], 'pending')} disabled={processingId === selectedRegistration.id} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-amber-50 hover:text-amber-700">
+                                                                                    <RotateCcw className="w-3 h-3 mr-1"/>คืนรออนุมัติ
+                                                                                </Button>
+                                                                            )}
+                                                                            <Button variant="ghost" size="sm" onClick={() => { setRescheduleAttendeeIds([attendee.id]); setReschedulingRegistration(selectedRegistration); }} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-blue-50 hover:text-blue-700">เลื่อนรอบ</Button>
+                                                                            {attendee.status !== 'cancelled' && (
+                                                                                <Button variant="ghost" size="sm" onClick={() => handleUpdateAttendeesStatus(selectedRegistration, [attendee.id], 'cancelled')} disabled={processingId === selectedRegistration.id} className="font-bold text-xs h-8 px-3 rounded-lg hover:bg-red-50 hover:text-red-700">ยกเลิก</Button>
+                                                                            )}
+                                                                        </div>
+                                                                    </TableCell>
+                                                                </TableRow>
+                                                            ))}
+                                                        </TableBody>
+                                                    </Table>
+                                                </div>
+                                            </>
+                                        );
+                                    })()}
                                 </TabsContent>
 
                                 {/* FORM DATA TAB */}
