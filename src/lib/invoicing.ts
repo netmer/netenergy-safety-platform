@@ -6,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 
 // --- Generic Payload Structure matching the API spec ---
 export interface QuoteRequestPayload {
-  documentType: 'quotation' | 'invoice';
+  documentType: 'quotation' | 'invoice' | 'receipt';
   issuerId: string;
   customerData: {
     customerName: string;
@@ -195,7 +195,25 @@ export async function createInvoice(registration: Registration) {
     const courseDoc = await getDoc(doc(db, 'courses', registration.courseId));
     if (!courseDoc.exists()) throw new Error('ไม่พบข้อมูลหลักสูตรที่เกี่ยวข้อง');
     const course = courseDoc.data() as Course;
-    
+
     const payload = registrationToPayload(registration, course, 'invoice');
+    return await createDocumentFromPayload(payload);
+}
+
+/**
+ * Creates a Receipt for a specific registration (requires invoice to be generated first)
+ */
+export async function createReceipt(registration: Registration) {
+    if (!registration.invoiceGenerated) {
+        throw new Error('ต้องสร้างใบแจ้งหนี้ก่อนออกใบเสร็จ');
+    }
+    const courseDoc = await getDoc(doc(db, 'courses', registration.courseId));
+    if (!courseDoc.exists()) throw new Error('ไม่พบข้อมูลหลักสูตรที่เกี่ยวข้อง');
+    const course = courseDoc.data() as Course;
+
+    const payload = registrationToPayload(registration, course, 'receipt');
+    if (registration.invoiceId) {
+        payload.notes = `ชำระเงินแล้ว - อ้างอิงใบแจ้งหนี้: ${registration.invoiceId}`;
+    }
     return await createDocumentFromPayload(payload);
 }

@@ -7,7 +7,8 @@ import { revalidatePath } from 'next/cache';
 import type { Registration, RegistrationStatus, IndividualAttendeeStatus, RegistrationAttendee, AttendeeData, TrainingRecord, Course } from '@/lib/course-data';
 import { z } from 'zod';
 import { sendEmail, emailTemplates } from '@/lib/mail';
-import { createQuotation, createInvoice } from '@/lib/invoicing';
+import { writeAuditLog } from '@/lib/audit';
+import { generateQuotationAction, generateInvoiceAction } from '@/app/erp/billing/actions';
 
 const PAGE_SIZE = 30;
 
@@ -126,34 +127,34 @@ export async function rescheduleIndividualAttendeesAction({
         const batch = writeBatch(db);
 
         if (isFullReschedule) {
-            // OPTION A: Full Move - Just update existing registration
-            batch.update(regRef, { 
-                scheduleId: newScheduleId,
-                [`formData.${attendeeListField.id}`]: currentAttendees.map(a => ({ ...a, status: 'pending' })) // Reset status to pending in new round
-            });
+            // OPTION A: Full Move — update registration scheduleId, reset attendees to pending (clean slate)
+            // Delete ALL existing training records so they are re-created after re-approval in new schedule
+            const allRecordsSnap = await getDocs(
+                query(collection(db, 'trainingRecords'), where('registrationId', '==', registrationId))
+            );
+            allRecordsSnap.docs.forEach(d => batch.delete(d.ref));
 
-            // Update all training records
-            const recordsQuery = query(collection(db, 'trainingRecords'), where('registrationId', '==', registrationId));
-            const recordsSnapshot = await getDocs(recordsQuery);
-            recordsSnapshot.forEach(recordDoc => {
-                batch.update(recordDoc.ref, { scheduleId: newScheduleId });
+            batch.update(regRef, {
+                scheduleId: newScheduleId,
+                status: 'pending',
+                [`formData.${attendeeListField.id}`]: currentAttendees.map(a => ({ ...a, status: 'pending' })),
             });
 
             await batch.commit();
         } else {
-            // OPTION B: Partial Move - Split into a NEW registration
+            // OPTION B: Partial Move — split into NEW registration
             const movedAttendees = currentAttendees.filter(a => attendeeIds.includes(a.id));
-            const remainingAttendees = currentAttendees.map(a => {
-                if (attendeeIds.includes(a.id)) {
-                    return { ...a, status: 'postponed', movedToScheduleId: newScheduleId };
-                }
-                return a;
-            });
+            const remainingAttendees = currentAttendees.map(a =>
+                attendeeIds.includes(a.id)
+                    ? { ...a, status: 'postponed', movedToScheduleId: newScheduleId }
+                    : a
+            );
 
-            // 1. Update old registration to remove/mark moved attendees
+            // 1. Mark moved attendees as postponed in the original registration
             batch.update(regRef, { [`formData.${attendeeListField.id}`]: remainingAttendees });
 
-            // 2. Create NEW registration for moved attendees
+            // 2. Create NEW registration for moved attendees (status: pending, needs re-approval)
+            const newRegRef = doc(collection(db, 'registrations'));
             const newRegData: Omit<Registration, 'id'> = {
                 ...registrationData,
                 scheduleId: newScheduleId,
@@ -161,29 +162,55 @@ export async function rescheduleIndividualAttendeesAction({
                 status: 'pending',
                 formData: {
                     ...registrationData.formData,
-                    [attendeeListField.id]: movedAttendees.map(a => ({ ...a, status: 'pending' }))
-                }
+                    [attendeeListField.id]: movedAttendees.map(a => ({ ...a, status: 'pending' })),
+                },
             };
-            const newRegRef = doc(collection(db, 'registrations'));
             batch.set(newRegRef, newRegData);
 
-            // 3. Update existing TrainingRecords to the NEW registration and schedule
-            const recordsQuery = query(
-                collection(db, 'trainingRecords'), 
-                where('registrationId', '==', registrationId),
-                where('registrationAttendeeId', 'in', attendeeIds)
+            // 3. DELETE training records of moved attendees from the OLD schedule — they start fresh
+            //    in the new registration and will be re-created when re-approved
+            const attendeeIdsSet = new Set(attendeeIds);
+            const movedRecordsSnap = await getDocs(
+                query(collection(db, 'trainingRecords'), where('registrationId', '==', registrationId))
             );
-            const recordsSnapshot = await getDocs(recordsQuery);
-            recordsSnapshot.forEach(recordDoc => {
-                batch.update(recordDoc.ref, { 
-                    scheduleId: newScheduleId,
-                    registrationId: newRegRef.id 
-                });
+            movedRecordsSnap.docs.forEach(d => {
+                if (attendeeIdsSet.has(d.data().registrationAttendeeId as string)) {
+                    batch.delete(d.ref);
+                }
             });
 
             await batch.commit();
         }
-        
+
+        // Send email notification (fire-and-forget)
+        try {
+            if (isFullReschedule) {
+                const tpl = emailTemplates.scheduleRescheduled(
+                    registrationData.userDisplayName || 'ลูกค้า',
+                    registrationData.courseTitle,
+                    new Date(registrationData.scheduleId).toLocaleDateString('th-TH'),
+                    new Date(newSchedule.startDate).toLocaleDateString('th-TH'),
+                    newSchedule.location || ''
+                );
+                sendEmail({ to: registrationData.userEmail, subject: tpl.subject, html: tpl.html });
+            } else {
+                const movedAttendees = (registrationData.formData[attendeeListField!.id] || []) as RegistrationAttendee[];
+                const movedNames = movedAttendees
+                    .filter(a => attendeeIds.includes(a.id))
+                    .map(a => (a as any).attendeeName || a.fullName || 'ผู้อบรม');
+                const tpl = emailTemplates.attendeeRescheduled(
+                    registrationData.userDisplayName || 'ลูกค้า',
+                    registrationData.courseTitle,
+                    movedNames,
+                    new Date(newSchedule.startDate).toLocaleDateString('th-TH'),
+                    newSchedule.location || ''
+                );
+                sendEmail({ to: registrationData.userEmail, subject: tpl.subject, html: tpl.html });
+            }
+        } catch (emailErr) {
+            console.warn("Reschedule email failed:", emailErr);
+        }
+
         revalidatePath('/erp/registrations');
         revalidatePath('/erp/attendees');
         return { success: true, message: `ย้ายรอบผู้อบรม ${attendeeIds.length} ท่าน ไปยังรอบวันที่ ${new Date(newSchedule.startDate).toLocaleDateString('th-TH')} เรียบร้อยแล้ว` };
@@ -224,14 +251,27 @@ export async function rescheduleRegistrationAction(registrationId: string, newSc
             });
         }
         
-        // 2. Update schedule in all training records for this registration
+        // 2. DELETE all training records — clean slate, re-created after re-approval in new schedule
         const recordsQuery = query(collection(db, 'trainingRecords'), where('registrationId', '==', registrationId));
         const recordsSnapshot = await getDocs(recordsQuery);
-        recordsSnapshot.forEach(recordDoc => {
-            batch.update(recordDoc.ref, { scheduleId: newScheduleId });
-        });
-        
+        recordsSnapshot.forEach(recordDoc => batch.delete(recordDoc.ref));
+
         await batch.commit();
+
+        // Send email notification (fire-and-forget)
+        try {
+            const tpl = emailTemplates.scheduleRescheduled(
+                registrationData.userDisplayName || 'ลูกค้า',
+                registrationData.courseTitle,
+                new Date(registrationData.scheduleId).toLocaleDateString('th-TH'),
+                new Date(newSchedule.startDate).toLocaleDateString('th-TH'),
+                newSchedule.location || ''
+            );
+            sendEmail({ to: registrationData.userEmail, subject: tpl.subject, html: tpl.html });
+        } catch (emailErr) {
+            console.warn("Reschedule email failed:", emailErr);
+        }
+
         revalidatePath('/erp/registrations');
         revalidatePath('/erp/attendees');
         return { success: true, message: `ย้ายใบสมัครทั้งหมดไปยังรอบวันที่ ${new Date(newSchedule.startDate).toLocaleDateString('th-TH')} เรียบร้อยแล้ว` };
@@ -250,7 +290,18 @@ export async function updateRegistrationStatus(id: string, status: RegistrationS
         const regData = regSnap.data() as Registration;
 
         await updateDoc(registrationRef, { status });
-        
+
+        // Audit log (fire-and-forget)
+        writeAuditLog({
+            collectionName: 'registrations',
+            documentId: id,
+            action: 'status_change',
+            before: { status: regData.status },
+            after: { status },
+            performedBy: 'system',
+            note: `เปลี่ยนสถานะจาก ${regData.status} → ${status}`,
+        });
+
         const statusTextMap = {
             'confirmed': 'ได้รับการยืนยันการลงทะเบียนแล้ว',
             'cancelled': 'ถูกยกเลิกการลงทะเบียน',
@@ -349,6 +400,16 @@ export async function deleteRegistration(id: string) {
 
         await batch.commit();
 
+        // Audit log (fire-and-forget)
+        writeAuditLog({
+            collectionName: 'registrations',
+            documentId: id,
+            action: 'delete',
+            before: { courseTitle: registrationDoc.data()?.courseTitle, status: registrationDoc.data()?.status },
+            performedBy: 'system',
+            note: `ลบใบสมัคร + training records ${recordsSnapshot.size} รายการ`,
+        });
+
         revalidatePath('/erp/registrations');
         revalidatePath('/profile');
         return { success: true, message: 'ลบข้อมูลการลงทะเบียนสำเร็จ' };
@@ -386,12 +447,18 @@ export async function updateIndividualAttendeeStatus({
     });
 
     if (newStatus === 'confirmed') {
+      // Fetch existing training records for this registration to prevent duplicates
+      const existingRecordsSnap = await getDocs(
+        query(collection(db, 'trainingRecords'), where('registrationId', '==', registrationId))
+      );
+      const existingAttendeeIds = new Set(existingRecordsSnap.docs.map(d => d.data().registrationAttendeeId as string));
+
       const attendeeListSchema = registrationData.formSchema.find(f => f.id === attendeeListFieldId);
       const fullNameField = attendeeListSchema?.subFields?.find(f => f.label.includes("ชื่อ-นามสกุล"));
-      
+
       for (const attendeeId of attendeeIds) {
         const attendeeToConfirm = currentAttendees.find(a => a.id === attendeeId);
-        if (attendeeToConfirm && attendeeToConfirm.status !== 'confirmed') {
+        if (attendeeToConfirm && attendeeToConfirm.status !== 'confirmed' && !existingAttendeeIds.has(attendeeId)) {
             const attendeeName = fullNameField ? (attendeeToConfirm[fullNameField.id] as string) : 'ผู้อบรม';
             const trainingRecordData: Omit<TrainingRecord, 'id'> = {
               attendeeId: attendeeToConfirm.attendeeId || null,
@@ -410,6 +477,17 @@ export async function updateIndividualAttendeeStatus({
             batch.set(newRecordRef, trainingRecordData);
         }
       }
+    } else {
+      // For cancelled / pending / postponed: remove the training record so it disappears from daily management
+      const attendeeIdsSet = new Set(attendeeIds);
+      const recordsToDeleteSnap = await getDocs(
+        query(collection(db, 'trainingRecords'), where('registrationId', '==', registrationId))
+      );
+      recordsToDeleteSnap.docs.forEach(d => {
+        if (attendeeIdsSet.has(d.data().registrationAttendeeId as string)) {
+          batch.delete(d.ref);
+        }
+      });
     }
     
     batch.update(registrationRef, {
@@ -433,46 +511,6 @@ export async function updateIndividualAttendeeStatus({
   }
 }
 
-export async function createQuotationAction(registrationId: string) {
-    try {
-        const regSnap = await getDoc(doc(db, 'registrations', registrationId));
-        if (!regSnap.exists()) throw new Error("Registration not found");
-        const reg = { id: regSnap.id, ...regSnap.data() } as Registration;
-        
-        const result = await createQuotation(reg);
-        if (result.success && result.publicUrl) {
-            await updateDoc(doc(db, 'registrations', registrationId), { 
-                quotationGenerated: true,
-                quotationUrl: result.publicUrl,
-                quotationId: result.documentId || null
-            });
-            revalidatePath('/erp/registrations');
-            revalidatePath('/erp/billing');
-        }
-        return result;
-    } catch (e) {
-        return { success: false, message: e instanceof Error ? e.message : 'Unknown error' };
-    }
-}
-
-export async function createInvoiceAction(registrationId: string) {
-    try {
-        const regSnap = await getDoc(doc(db, 'registrations', registrationId));
-        if (!regSnap.exists()) throw new Error("Registration not found");
-        const reg = { id: regSnap.id, ...regSnap.data() } as Registration;
-        
-        const result = await createInvoice(reg);
-        if (result.success && result.publicUrl) {
-            await updateDoc(doc(db, 'registrations', registrationId), { 
-                invoiceGenerated: true,
-                invoiceUrl: result.publicUrl,
-                invoiceId: result.documentId || null
-            });
-            revalidatePath('/erp/registrations');
-            revalidatePath('/erp/billing');
-        }
-        return result;
-    } catch (e) {
-        return { success: false, message: e instanceof Error ? e.message : 'Unknown error' };
-    }
-}
+// Wrappers delegating to canonical implementations in billing/actions
+export async function createQuotationAction(registrationId: string) { return generateQuotationAction(registrationId); }
+export async function createInvoiceAction(registrationId: string) { return generateInvoiceAction(registrationId); }

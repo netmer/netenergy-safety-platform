@@ -2,9 +2,13 @@
 
 import { z } from 'zod';
 import { db } from '@/lib/firebase';
-import { collection, addDoc, doc, updateDoc, getDoc, deleteDoc, query, where, getDocs } from 'firebase/firestore';
+import { collection, addDoc, doc, updateDoc, getDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
-import type { Course } from '@/lib/course-data';
+import type { Course, Registration, TrainingSchedule } from '@/lib/course-data';
+import { sendEmail, emailTemplates } from '@/lib/mail';
+import { writeAuditLog } from '@/lib/audit';
+import { format } from 'date-fns';
+import { th } from 'date-fns/locale';
 
 const FormSchema = z.object({
   courseId: z.string().min(1, { message: 'กรุณาเลือกหลักสูตร' }),
@@ -61,6 +65,28 @@ const sanitizeDate = (dateStr: string) => {
     return dateStr.split('T')[0]; // Keep only yyyy-MM-dd
 };
 
+const formatThaiDate = (dateStr: string) => {
+    try {
+        return format(new Date(dateStr), 'd MMMM yyyy', { locale: th });
+    } catch {
+        return dateStr;
+    }
+};
+
+/** Commits batched writes in chunks of 400 to stay under Firestore's 500-op limit */
+async function commitInChunks(operations: Array<{ ref: any; data: any; type: 'update' | 'delete' }>) {
+    const CHUNK_SIZE = 400;
+    for (let i = 0; i < operations.length; i += CHUNK_SIZE) {
+        const chunk = operations.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        chunk.forEach(op => {
+            if (op.type === 'update') batch.update(op.ref, op.data);
+            else batch.delete(op.ref);
+        });
+        await batch.commit();
+    }
+}
+
 export async function createSchedule(prevState: FormState, formData: FormData): Promise<FormState> {
   const rawData = Object.fromEntries(formData.entries());
   const validatedFields = FormSchema.safeParse(rawData);
@@ -79,9 +105,9 @@ export async function createSchedule(prevState: FormState, formData: FormData): 
     if (instructorName) {
         await findOrCreateInstructor(instructorName);
     }
-    
+
     const courseTitle = await getCourseTitle(courseId);
-    
+
     await addDoc(collection(db, 'trainingSchedules'), {
       courseId,
       location,
@@ -114,7 +140,7 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
             success: false
         };
     }
-    
+
     const { courseId, location, status, startDate, endDate, instructorName } = validatedFields.data;
     const scheduleRef = doc(db, 'trainingSchedules', id);
 
@@ -122,19 +148,71 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
         if (instructorName) {
             await findOrCreateInstructor(instructorName);
         }
-        
+
+        // Fetch old data to detect changes
+        const oldSnap = await getDoc(scheduleRef);
+        const oldData = oldSnap.exists() ? oldSnap.data() as TrainingSchedule : null;
+
         const courseTitle = await getCourseTitle(courseId);
-        
+        const newStartDate = sanitizeDate(startDate);
+        const newEndDate = sanitizeDate(endDate);
+
         await updateDoc(scheduleRef, {
             courseId,
             location,
             status,
-            startDate: sanitizeDate(startDate),
-            endDate: sanitizeDate(endDate),
+            startDate: newStartDate,
+            endDate: newEndDate,
             courseTitle,
             instructorName: instructorName || '',
             updatedAt: new Date().toISOString(),
         });
+
+        // Cascade: update denormalized courseTitle in trainingRecords if course changed
+        const courseTitleChanged = oldData && oldData.courseTitle !== courseTitle;
+        if (courseTitleChanged) {
+            const recordsQ = query(collection(db, 'trainingRecords'), where('scheduleId', '==', id));
+            const recordsSnap = await getDocs(recordsQ);
+            const ops = recordsSnap.docs.map(d => ({ ref: d.ref, data: { courseTitle }, type: 'update' as const }));
+            if (ops.length > 0) await commitInChunks(ops);
+        }
+
+        // Cascade: send email if dates or status changed
+        const datesChanged = oldData && (oldData.startDate !== newStartDate || oldData.endDate !== newEndDate);
+        const statusChanged = oldData && oldData.status !== status;
+
+        if (datesChanged || statusChanged) {
+            const regsQ = query(collection(db, 'registrations'), where('scheduleId', '==', id), where('status', '!=', 'cancelled'));
+            const regsSnap = await getDocs(regsQ);
+
+            const emailPromises = regsSnap.docs.map(regDoc => {
+                const reg = regDoc.data() as Registration;
+                if (!reg.userEmail) return Promise.resolve();
+
+                if (status === 'ยกเลิก') {
+                    const tpl = emailTemplates.scheduleCancelled(
+                        reg.userDisplayName || 'ลูกค้า',
+                        courseTitle,
+                        formatThaiDate(oldData?.startDate || ''),
+                        'รอบอบรมถูกยกเลิก'
+                    );
+                    return sendEmail({ to: reg.userEmail, subject: tpl.subject, html: tpl.html });
+                } else if (datesChanged) {
+                    const tpl = emailTemplates.scheduleRescheduled(
+                        reg.userDisplayName || 'ลูกค้า',
+                        courseTitle,
+                        formatThaiDate(oldData?.startDate || ''),
+                        formatThaiDate(newStartDate),
+                        location
+                    );
+                    return sendEmail({ to: reg.userEmail, subject: tpl.subject, html: tpl.html });
+                }
+                return Promise.resolve();
+            });
+
+            // Fire-and-forget: don't block the response if emails fail
+            Promise.allSettled(emailPromises).catch(err => console.error("Bulk email error:", err));
+        }
 
         revalidatePath('/erp/schedule');
         revalidatePath('/courses');
@@ -147,12 +225,78 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
 
 export async function deleteSchedule(id: string) {
     try {
-        await deleteDoc(doc(db, 'trainingSchedules', id));
+        const scheduleRef = doc(db, 'trainingSchedules', id);
+        const scheduleSnap = await getDoc(scheduleRef);
+        if (!scheduleSnap.exists()) {
+            return { success: false, message: 'ไม่พบข้อมูลรอบอบรม' };
+        }
+        const scheduleData = scheduleSnap.data() as TrainingSchedule;
+
+        // Check for active training records before allowing delete
+        const activeRecordsQ = query(
+            collection(db, 'trainingRecords'),
+            where('scheduleId', '==', id),
+            where('status', 'in', ['pending_verification', 'docs_verified'])
+        );
+        const activeRecordsSnap = await getDocs(activeRecordsQ);
+
+        if (!activeRecordsSnap.empty) {
+            return {
+                success: false,
+                message: `ไม่สามารถลบรอบอบรมได้ เนื่องจากมีผู้อบรมที่กำลังดำเนินการอยู่ ${activeRecordsSnap.size} ท่าน กรุณาจัดการผู้อบรมก่อนลบรอบ`
+            };
+        }
+
+        // Fetch affected registrations to send cancellation emails
+        const regsQ = query(collection(db, 'registrations'), where('scheduleId', '==', id), where('status', '!=', 'cancelled'));
+        const regsSnap = await getDocs(regsQ);
+
+        // Cascade: cancel all non-cancelled registrations using batched writes
+        const regOps = regsSnap.docs.map(regDoc => ({
+            ref: regDoc.ref,
+            data: { status: 'cancelled', cancellationReason: 'รอบอบรมถูกลบออกจากระบบ' },
+            type: 'update' as const,
+        }));
+
+        if (regOps.length > 0) {
+            await commitInChunks(regOps);
+        }
+
+        // Delete the schedule itself
+        await deleteDoc(scheduleRef);
+
+        // Audit log (fire-and-forget)
+        writeAuditLog({
+            collectionName: 'trainingSchedules',
+            documentId: id,
+            action: 'delete',
+            before: { courseTitle: scheduleData.courseTitle, startDate: scheduleData.startDate },
+            performedBy: 'system',
+            note: `ลบรอบอบรม — cascade ยกเลิก ${regsSnap.size} ใบสมัคร`,
+        });
+
+        // Send cancellation emails (fire-and-forget)
+        const emailPromises = regsSnap.docs.map(regDoc => {
+            const reg = regDoc.data() as Registration;
+            if (!reg.userEmail) return Promise.resolve();
+            const tpl = emailTemplates.scheduleCancelled(
+                reg.userDisplayName || 'ลูกค้า',
+                scheduleData.courseTitle,
+                formatThaiDate(scheduleData.startDate),
+                'รอบอบรมถูกลบออกจากระบบ'
+            );
+            return sendEmail({ to: reg.userEmail, subject: tpl.subject, html: tpl.html });
+        });
+        Promise.allSettled(emailPromises).catch(err => console.error("Cancellation email error:", err));
+
         revalidatePath('/erp/schedule');
         revalidatePath('/courses');
-        return { success: true, message: 'ลบรอบอบรมเรียบร้อยแล้ว' };
+        return {
+            success: true,
+            message: `ลบรอบอบรมเรียบร้อยแล้ว${regsSnap.size > 0 ? ` (ยกเลิกใบสมัครที่เกี่ยวข้อง ${regsSnap.size} รายการ และส่งอีเมลแจ้งเตือนแล้ว)` : ''}`
+        };
     } catch (e) {
         console.error("Delete Schedule Error:", e);
-        return { success: false, message: 'ไม่สามารถลบข้อมูลได้' };
+        return { success: false, message: e instanceof Error ? e.message : 'ไม่สามารถลบข้อมูลได้' };
     }
 }

@@ -223,7 +223,7 @@ export async function deleteAttendeeDocument(attendeeId: string, docUrl: string,
             existingDocs = (recordSnap.data() as TrainingRecord).recordSpecificDocs || [];
         } else {
             docRef = doc(db, 'attendees', attendeeId);
-            const attendeeSnap = await getDoc(attendeeRef);
+            const attendeeSnap = await getDoc(docRef);
             if (!attendeeSnap.exists()) throw new Error("Attendee not found.");
             existingDocs = (attendeeSnap.data() as AttendeeData).documents || [];
         }
@@ -380,4 +380,184 @@ export async function deleteTrainingRecord(recordId: string) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         return { success: false, message: `Database Error: ${errorMessage}` };
     }
+}
+
+
+/** Bulk update multiple training records in one call (batched to stay under Firestore 500-op limit) */
+export async function bulkUpdateTrainingRecords(recordIds: string[], updates: Partial<TrainingRecord>) {
+    if (!recordIds || recordIds.length === 0) {
+        return { success: false, message: 'ไม่มีรายการที่เลือก' };
+    }
+    const CHUNK_SIZE = 400;
+    try {
+        for (let i = 0; i < recordIds.length; i += CHUNK_SIZE) {
+            const chunk = recordIds.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach(id => batch.update(doc(db, 'trainingRecords', id), updates));
+            await batch.commit();
+        }
+        revalidatePath('/erp/attendees');
+        return { success: true, message: `อัปเดต ${recordIds.length} รายการสำเร็จ` };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, message: `Database Error: ${errorMessage}` };
+    }
+}
+
+/** Bulk check-in: marks all selected attendees as present and logs to schedule history */
+export async function bulkCheckInAttendees(scheduleId: string, recordIds: string[], performedBy: string) {
+    if (!recordIds || recordIds.length === 0) {
+        return { success: false, message: 'ไม่มีรายการที่เลือก' };
+    }
+    const CHUNK_SIZE = 400;
+    try {
+        for (let i = 0; i < recordIds.length; i += CHUNK_SIZE) {
+            const chunk = recordIds.slice(i, i + CHUNK_SIZE);
+            const batch = writeBatch(db);
+            chunk.forEach(id => batch.update(doc(db, 'trainingRecords', id), { attendance: 'present' }));
+            await batch.commit();
+        }
+        // Log to schedule history subcollection
+        await addDoc(collection(db, 'trainingSchedules', scheduleId, 'history'), {
+            action: 'bulk_checkin',
+            count: recordIds.length,
+            performedBy,
+            timestamp: new Date().toISOString(),
+        });
+        revalidatePath('/erp/attendees');
+        return { success: true, message: `เช็คชื่อเข้าอบรม ${recordIds.length} ท่านสำเร็จ` };
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        return { success: false, message: `Database Error: ${errorMessage}` };
+    }
+}
+
+export type BulkImportRow = {
+    attendeeName: string;
+    companyName: string;
+    attendeeId?: string; // National ID / Passport (optional)
+};
+
+/** CSV bulk import: creates training records for a list of attendees */
+export async function bulkImportWalkInAttendees(rows: BulkImportRow[], scheduleId: string): Promise<{ success: boolean; message: string; created: number; errors: string[] }> {
+    if (!rows || rows.length === 0 || !scheduleId) {
+        return { success: false, message: 'ข้อมูลไม่ครบถ้วน', created: 0, errors: [] };
+    }
+
+    const scheduleSnap = await getDoc(doc(db, 'trainingSchedules', scheduleId));
+    if (!scheduleSnap.exists()) {
+        return { success: false, message: 'ไม่พบรอบอบรม', created: 0, errors: [] };
+    }
+    const scheduleData = scheduleSnap.data();
+    const courseId = scheduleData.courseId as string;
+    const courseTitle = scheduleData.courseTitle as string;
+
+    const errors: string[] = [];
+    const CHUNK_SIZE = 400;
+    let created = 0;
+
+    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+        for (const row of chunk) {
+            const rowNum = i + chunk.indexOf(row) + 1;
+            if (!row.attendeeName || !row.companyName) {
+                errors.push(`แถวที่ ${rowNum}: ชื่อหรือบริษัทไม่ครบ`);
+                continue;
+            }
+            // Check schedule conflict if attendeeId is provided
+            if (row.attendeeId) {
+                const conflict = await checkScheduleConflict(row.attendeeId, scheduleId);
+                if (conflict.hasConflict) {
+                    errors.push(`แถวที่ ${rowNum} (${row.attendeeName}): วันอบรมซ้อนกับรอบ "${conflict.conflictingCourseTitle}"`);
+                    continue;
+                }
+            }
+            const newRef = doc(collection(db, 'trainingRecords'));
+            const recordData: Omit<TrainingRecord, 'id'> = {
+                attendeeId: row.attendeeId || null,
+                attendeeName: row.attendeeName.trim(),
+                companyName: row.companyName.trim(),
+                registrationId: `bulk-import-${nanoid()}`,
+                registrationAttendeeId: `bulk-import-${nanoid()}`,
+                scheduleId,
+                courseId,
+                courseTitle,
+                completionDate: '',
+                status: 'pending_verification',
+                attendance: 'not_checked_in',
+            };
+            batch.set(newRef, recordData);
+            created++;
+        }
+        await batch.commit();
+    }
+
+    revalidatePath('/erp/attendees');
+    return {
+        success: true,
+        message: `นำเข้าสำเร็จ ${created} รายการ${errors.length > 0 ? ` (มีข้อผิดพลาด ${errors.length} รายการ)` : ''}`,
+        created,
+        errors,
+    };
+}
+
+/** Check if an attendee (by attendeeId/National ID) has a scheduling conflict with the given schedule */
+export async function checkScheduleConflict(attendeeId: string, scheduleId: string): Promise<{ hasConflict: boolean; conflictingScheduleId?: string; conflictingCourseTitle?: string }> {
+    if (!attendeeId || !scheduleId) return { hasConflict: false };
+
+    const targetSnap = await getDoc(doc(db, 'trainingSchedules', scheduleId));
+    if (!targetSnap.exists()) return { hasConflict: false };
+    const target = targetSnap.data();
+    const targetStart = new Date(target.startDate).getTime();
+    const targetEnd = new Date(target.endDate).getTime();
+
+    // Get all training records for this attendee
+    const existingQ = query(
+        collection(db, 'trainingRecords'),
+        where('attendeeId', '==', attendeeId),
+        where('status', 'in', ['pending_verification', 'docs_verified'])
+    );
+    const existingSnap = await getDocs(existingQ);
+
+    for (const recordDoc of existingSnap.docs) {
+        const record = recordDoc.data() as TrainingRecord;
+        if (record.scheduleId === scheduleId) continue; // Same schedule, skip
+        const schedSnap = await getDoc(doc(db, 'trainingSchedules', record.scheduleId));
+        if (!schedSnap.exists()) continue;
+        const sched = schedSnap.data();
+        const schedStart = new Date(sched.startDate).getTime();
+        const schedEnd = new Date(sched.endDate).getTime();
+        // Check overlap: two ranges [a,b] and [c,d] overlap if a <= d && c <= b
+        if (targetStart <= schedEnd && schedStart <= targetEnd) {
+            return { hasConflict: true, conflictingScheduleId: record.scheduleId, conflictingCourseTitle: record.courseTitle };
+        }
+    }
+    return { hasConflict: false };
+}
+
+/** Bulk email to all registrations in a schedule */
+export async function sendBulkScheduleEmail(scheduleId: string, subject: string, messageBody: string): Promise<{ success: boolean; message: string; sent: number; failed: number }> {
+    if (!scheduleId || !subject || !messageBody) {
+        return { success: false, message: 'ข้อมูลไม่ครบถ้วน', sent: 0, failed: 0 };
+    }
+    const { sendEmail, emailTemplates } = await import('@/lib/mail');
+    const schedSnap = await getDoc(doc(db, 'trainingSchedules', scheduleId));
+    if (!schedSnap.exists()) return { success: false, message: 'ไม่พบรอบอบรม', sent: 0, failed: 0 };
+    const sched = schedSnap.data();
+
+    const regsQ = query(collection(db, 'registrations'), where('scheduleId', '==', scheduleId), where('status', '!=', 'cancelled'));
+    const regsSnap = await getDocs(regsQ);
+
+    const uniqueEmails = [...new Set(regsSnap.docs.map(d => d.data().userEmail as string).filter(Boolean))];
+
+    let sent = 0;
+    let failed = 0;
+    const results = await Promise.allSettled(uniqueEmails.map(email => {
+        const tpl = emailTemplates.bulkScheduleNotice(sched.courseTitle, sched.startDate, messageBody);
+        return sendEmail({ to: email, subject, html: tpl.html });
+    }));
+    results.forEach(r => r.status === 'fulfilled' ? sent++ : failed++);
+
+    return { success: true, message: `ส่งอีเมลสำเร็จ ${sent} รายการ, ล้มเหลว ${failed} รายการ`, sent, failed };
 }

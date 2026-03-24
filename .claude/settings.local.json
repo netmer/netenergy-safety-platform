@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__Claude_Preview__preview_start",
+      "Bash(npx tsc:*)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:3000/ --max-time 15)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3000/erp/registrations\" --max-time 20)",
+      "Bash(curl -s \"http://localhost:3000/erp/registrations\" --max-time 20)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:3000/profile\" --max-time 20)"
+    ]
+  }
+}

@@ -243,7 +243,7 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
     // Component to intelligently render deep form data
     const renderFormFieldValue = (field: RegistrationFormField, reg: Registration) => {
         const value = reg.formData[field.id];
-        if (!value && field.type !== 'header' && field.type !== 'page_break') return null;
+        if ((value == null || value === '') && field.type !== 'header' && field.type !== 'page_break') return null;
 
         switch (field.type) {
             case 'header':
@@ -273,11 +273,16 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
                             <div className="text-sm bg-white dark:bg-slate-950 p-5 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm leading-relaxed min-h-[100px]">
                                 <p className="font-semibold text-slate-900 dark:text-white">{billing.address1 || '-'}</p>
                                 <p className="text-slate-600 dark:text-slate-400 font-light">
-                                    {billing.subdistrict ? `ต.${billing.subdistrict} ` : ''} 
-                                    {billing.district ? `อ.${billing.district} ` : ''} 
-                                    {billing.province ? `จ.${billing.province} ` : ''} 
+                                    {billing.subdistrict ? `ต.${billing.subdistrict} ` : ''}
+                                    {billing.district ? `อ.${billing.district} ` : ''}
+                                    {billing.province ? `จ.${billing.province} ` : ''}
                                     {billing.postalCode || ''}
                                 </p>
+                                {billing.taxId && (
+                                    <p className="text-slate-500 dark:text-slate-400 text-xs mt-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                                        เลขประจำตัวผู้เสียภาษี: <span className="font-semibold text-slate-700 dark:text-slate-300">{billing.taxId}</span>
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <div className="space-y-3">
@@ -308,12 +313,34 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
             case 'attendee_list':
                 // We will skip attendee_list here because it's managed in the main Attendees Tab.
                 return null;
+            case 'select':
+            case 'radio': {
+                const selectedOption = field.options?.find((o: { value: string; label: string }) => o.value === value);
+                const displayLabel = selectedOption?.label || String(value || '-');
+                return (
+                    <div className="py-3 border-b border-slate-50 dark:border-slate-800/50 last:border-none text-left" key={field.id}>
+                        <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{field.label}</Label>
+                        <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 mt-1">{displayLabel}</p>
+                    </div>
+                );
+            }
+            case 'file':
+                return (
+                    <div className="py-3 border-b border-slate-50 dark:border-slate-800/50 last:border-none text-left" key={field.id}>
+                        <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{field.label}</Label>
+                        <a href={String(value)} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline mt-1 font-medium">
+                            <FileText className="w-4 h-4 shrink-0" />
+                            ดูไฟล์แนบ
+                        </a>
+                    </div>
+                );
             default:
                 if (field.type === 'page_break') return <Separator key={field.id} className="my-8" />;
                 return (
                     <div className="py-3 border-b border-slate-50 dark:border-slate-800/50 last:border-none text-left" key={field.id}>
                         <Label className="text-[10px] text-muted-foreground uppercase font-bold tracking-widest">{field.label}</Label>
-                        <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 mt-1">{String(value || '-')}</p>
+                        <p className="font-semibold text-sm text-slate-800 dark:text-slate-200 mt-1">{String(value ?? '-')}</p>
                     </div>
                 );
         }
@@ -377,7 +404,7 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
                                     >
                                         <div className="flex justify-between items-start">
                                             <div className="font-bold text-[15px] truncate max-w-[85%]">{reg.clientCompanyName || reg.userDisplayName}</div>
-                                            <AttendeeStatusBadge status={reg.status === 'cancelled' ? 'cancelled' : 'pending'} />
+                                            <AttendeeStatusBadge status={reg.status === 'cancelled' ? 'cancelled' : reg.status === 'confirmed' ? 'confirmed' : 'pending'} />
                                         </div>
                                         <div className={cn("text-xs font-semibold truncate", isSelected ? "text-slate-300 dark:text-slate-100/80" : "text-primary")}>
                                             {coursesMap.get(reg.courseId)?.shortName || reg.courseTitle}

@@ -188,16 +188,29 @@ export default function SystemTestPage() {
             </div>
           </CardHeader>
           <form action={formAction} className="flex-1 flex flex-col p-8">
-            <div className="space-y-6 flex-1 text-left">
+            <div className="space-y-4 flex-1 text-left">
               <div className="space-y-2">
                 <Label htmlFor="email" className="font-bold text-[10px] uppercase tracking-wider text-slate-400">ระบุอีเมลผู้รับทดสอบ</Label>
                 <Input id="email" name="email" type="email" placeholder="test@gmail.com" required className="h-14 text-lg rounded-2xl bg-slate-50 dark:bg-slate-950 border-none" />
               </div>
-              <p className="text-sm text-muted-foreground font-light leading-relaxed italic">
+              <div className="space-y-2">
+                <Label htmlFor="templateType" className="font-bold text-[10px] uppercase tracking-wider text-slate-400">เลือก Template อีเมล</Label>
+                <select id="templateType" name="templateType" className="w-full h-11 rounded-xl border border-input bg-slate-50 dark:bg-slate-950 px-3 text-sm">
+                  <option value="basic">Basic Test</option>
+                  <option value="registrationReceived">ลงทะเบียนสำเร็จ</option>
+                  <option value="statusUpdated">อัปเดตสถานะ</option>
+                  <option value="scheduleRescheduled">เปลี่ยนวันอบรม</option>
+                  <option value="scheduleCancelled">ยกเลิกรอบอบรม</option>
+                  <option value="attendeeRescheduled">ย้ายรอบผู้อบรม</option>
+                  <option value="bulkScheduleNotice">ประกาศทั่วไป</option>
+                  <option value="quoteRequestReceived">รับคำขอใบเสนอราคา</option>
+                </select>
+              </div>
+              <p className="text-xs text-muted-foreground font-light leading-relaxed italic">
                 * คลิกปุ่มด้านล่างเพื่อส่งข้อมูลคำขอไปยังคอลเลกชัน `mail` และรอ Cloud Function ประมวลผลครับ
               </p>
             </div>
-            <CardFooter className="p-0 mt-8">
+            <CardFooter className="p-0 mt-6">
               <SubmitButton />
             </CardFooter>
           </form>

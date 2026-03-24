@@ -19,7 +19,7 @@ import {
     Clock, BookCheck, ShieldCheck, XCircle, UserRound, UserRoundX,
     CalendarClock, Loader2, PlusCircle, Building, Users, Download,
     History, Edit3, UserCheck, Calendar, User, Printer, CreditCard,
-    CheckCircle2, TrendingUp, UserPlus, ChevronDown
+    CheckCircle2, TrendingUp, UserPlus, ChevronDown, Upload, AlertCircle
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
@@ -30,6 +30,7 @@ import { useToast } from '@/hooks/use-toast';
 import { CaregiverSelect } from '@/components/erp/caregiver-select';
 import { EditAttendeeModal } from '@/components/erp/edit-attendee-modal';
 import { AddWalkinAttendeeModal } from '@/components/erp/add-walkin-attendee-modal';
+import { bulkImportWalkInAttendees, type BulkImportRow } from '@/app/erp/attendees/actions';
 
 type StatusFilter = 'all' | 'pending' | 'verified';
 
@@ -73,6 +74,12 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
 
     // Walk-in Modal State
     const [isWalkinModalOpen, setIsWalkinModalOpen] = useState(false);
+
+    // CSV Import State
+    const [isCsvModalOpen, setIsCsvModalOpen] = useState(false);
+    const [csvPreview, setCsvPreview] = useState<BulkImportRow[]>([]);
+    const [csvErrors, setCsvErrors] = useState<string[]>([]);
+    const [isCsvImporting, startCsvTransition] = useTransition();
 
     // Smart Card Reader State
     const [isReadingCard, setIsReadingCard] = useState<string | null>(null);
@@ -337,6 +344,47 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         toast({ title: 'ดาวน์โหลดสำเร็จ', description: 'สร้างไฟล์ CSV เรียบร้อยแล้ว' });
     };
 
+    const handleCsvFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            const text = ev.target?.result as string;
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            // Skip header row if it starts with non-numeric / contains "ชื่อ" keyword
+            const dataLines = lines[0]?.toLowerCase().includes('ชื่อ') || lines[0]?.toLowerCase().includes('name') ? lines.slice(1) : lines;
+            const rows: BulkImportRow[] = [];
+            const errs: string[] = [];
+            dataLines.forEach((line, i) => {
+                // Support comma or tab separated. Columns: attendeeName, companyName, attendeeId(optional)
+                const cols = line.split(/,|\t/).map(c => c.replace(/^"|"$/g, '').trim());
+                if (cols.length < 2) { errs.push(`แถว ${i + 1}: ต้องมีอย่างน้อย 2 คอลัมน์ (ชื่อ, บริษัท)`); return; }
+                rows.push({ attendeeName: cols[0], companyName: cols[1], attendeeId: cols[2] || undefined });
+            });
+            setCsvPreview(rows);
+            setCsvErrors(errs);
+        };
+        reader.readAsText(file, 'UTF-8');
+        // Reset input so same file can be re-selected
+        e.target.value = '';
+    };
+
+    const handleCsvImport = () => {
+        if (!scheduleFilter || scheduleFilter === 'all' || csvPreview.length === 0) return;
+        startCsvTransition(async () => {
+            const result = await bulkImportWalkInAttendees(csvPreview, scheduleFilter);
+            if (result.success) {
+                toast({ title: 'นำเข้าสำเร็จ', description: result.message });
+                logHistory('นำเข้า CSV', `นำเข้ารายชื่อ Walk-in จาก CSV จำนวน ${result.created} คน`);
+                setIsCsvModalOpen(false);
+                setCsvPreview([]);
+                setCsvErrors([]);
+            } else {
+                toast({ variant: 'destructive', title: 'ผิดพลาด', description: result.message });
+            }
+        });
+    };
+
     // Stat card subcomponent
     const StatCard = ({ label, value, color, icon: Icon }: { label: string; value: number; color: string; icon: React.ElementType }) => (
         <div className={cn("flex flex-col items-center justify-center p-4 rounded-2xl border gap-1", color)}>
@@ -418,6 +466,9 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                 </Button>
                                 <Button className="rounded-xl font-bold shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white h-11" onClick={exportToCSV}>
                                     <Download className="w-4 h-4 mr-2" /> Export CSV
+                                </Button>
+                                <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-slate-200" onClick={() => setIsCsvModalOpen(true)}>
+                                    <Upload className="w-4 h-4 mr-2" /> Import CSV
                                 </Button>
                                 <Button
                                     className="rounded-xl font-bold shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white h-11"
@@ -672,6 +723,77 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 schedule={selectedScheduleDetails as any}
                 onSuccess={() => setIsWalkinModalOpen(false)}
             />
+
+            {/* CSV Import Dialog */}
+            <Dialog open={isCsvModalOpen} onOpenChange={(open) => { setIsCsvModalOpen(open); if (!open) { setCsvPreview([]); setCsvErrors([]); } }}>
+                <DialogContent className="sm:max-w-2xl rounded-[2.5rem] z-[200]">
+                    <DialogHeader className="p-6 pb-2">
+                        <DialogTitle className="flex items-center gap-2 text-2xl font-bold font-headline">
+                            <Upload className="w-6 h-6 text-primary" /> นำเข้ารายชื่อจาก CSV
+                        </DialogTitle>
+                        <DialogDescription>
+                            รูปแบบ CSV: <code className="bg-muted px-1 rounded text-xs">ชื่อ-นามสกุล, บริษัท/หน่วยงาน, เลขบัตรประชาชน (optional)</code><br />
+                            รองรับ comma (,) หรือ tab (\t) เป็น delimiter — สามารถมี header row ได้
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="px-6 space-y-4">
+                        <label className="flex items-center justify-center w-full h-24 border-2 border-dashed border-muted-foreground/30 rounded-2xl cursor-pointer hover:border-primary/50 hover:bg-muted/30 transition-colors">
+                            <div className="text-center">
+                                <Upload className="w-6 h-6 mx-auto mb-1 text-muted-foreground" />
+                                <span className="text-sm text-muted-foreground font-medium">คลิกเพื่อเลือกไฟล์ .csv</span>
+                            </div>
+                            <input type="file" accept=".csv,.txt" className="sr-only" onChange={handleCsvFile} />
+                        </label>
+                        {csvErrors.length > 0 && (
+                            <div className="bg-red-50 border border-red-200 rounded-xl p-3 space-y-1">
+                                <p className="text-xs font-bold text-red-700 flex items-center gap-1"><AlertCircle className="w-3 h-3" /> พบข้อผิดพลาด {csvErrors.length} รายการ</p>
+                                {csvErrors.map((e, i) => <p key={i} className="text-xs text-red-600">{e}</p>)}
+                            </div>
+                        )}
+                        {csvPreview.length > 0 && (
+                            <div className="border rounded-xl overflow-hidden">
+                                <div className="bg-muted/20 px-4 py-2 text-xs font-bold text-muted-foreground">
+                                    ตัวอย่างข้อมูล ({csvPreview.length} รายการ) — แสดง 5 แรก
+                                </div>
+                                <table className="w-full text-xs">
+                                    <thead className="bg-muted/10">
+                                        <tr>
+                                            <th className="text-left p-2 font-semibold">#</th>
+                                            <th className="text-left p-2 font-semibold">ชื่อ-นามสกุล</th>
+                                            <th className="text-left p-2 font-semibold">บริษัท/หน่วยงาน</th>
+                                            <th className="text-left p-2 font-semibold">เลขบัตร</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y">
+                                        {csvPreview.slice(0, 5).map((row, i) => (
+                                            <tr key={i} className="hover:bg-muted/5">
+                                                <td className="p-2 text-muted-foreground">{i + 1}</td>
+                                                <td className="p-2 font-medium">{row.attendeeName}</td>
+                                                <td className="p-2 text-muted-foreground">{row.companyName}</td>
+                                                <td className="p-2 text-muted-foreground">{row.attendeeId || '-'}</td>
+                                            </tr>
+                                        ))}
+                                        {csvPreview.length > 5 && (
+                                            <tr><td colSpan={4} className="p-2 text-center text-muted-foreground italic">...และอีก {csvPreview.length - 5} รายการ</td></tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter className="p-6 pt-4 gap-2">
+                        <Button variant="ghost" onClick={() => setIsCsvModalOpen(false)} className="rounded-xl h-11">ยกเลิก</Button>
+                        <Button
+                            onClick={handleCsvImport}
+                            disabled={csvPreview.length === 0 || isCsvImporting}
+                            className="rounded-xl h-11 font-bold"
+                        >
+                            {isCsvImporting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Upload className="w-4 h-4 mr-2" />}
+                            นำเข้า {csvPreview.length > 0 ? `(${csvPreview.length} คน)` : ''}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

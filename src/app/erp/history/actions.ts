@@ -20,61 +20,93 @@ const toISOStringSafe = (date: any): string => {
 };
 
 
-export async function getPaginatedHistory({ 
-    searchQuery = '', 
-    companyFilter = 'all', 
-    lastVisibleId 
-}: { 
-    searchQuery?: string; 
+export async function getPaginatedHistory({
+    searchQuery = '',
+    companyFilter = 'all',
+    lastVisibleId
+}: {
+    searchQuery?: string;
     companyFilter?: string;
     lastVisibleId?: string;
 }) {
+    // When a text search is active, Firestore cannot do full-text search natively.
+    // We fall back to in-memory filtering in that case only.
+    // For production scale, consider Algolia or MeiliSearch.
+    if (searchQuery) {
+        // In-memory search path: fetch all for given company filter, then filter
+        let recordsQuery = query(
+            collection(db, 'trainingRecords'),
+            where('status', '==', 'completed'),
+            orderBy('completionDate', 'desc')
+        );
+        if (companyFilter !== 'all') {
+            recordsQuery = query(recordsQuery, where('companyName', '==', companyFilter));
+        }
+        const recordsSnapshot = await getDocs(recordsQuery);
+        const allRecords = recordsSnapshot.docs.map(d => {
+            const data = d.data();
+            return {
+                id: d.id, ...data,
+                completionDate: toISOStringSafe(data.completionDate),
+                certificateIssueDate: toISOStringSafe(data.certificateIssueDate),
+                expiryDate: data.expiryDate ? toISOStringSafe(data.expiryDate) : null,
+            } as TrainingRecord;
+        });
+        const searchLower = searchQuery.toLowerCase();
+        const filtered = allRecords.filter(r =>
+            r.attendeeName.toLowerCase().includes(searchLower) ||
+            r.companyName.toLowerCase().includes(searchLower)
+        );
+        const startIndex = lastVisibleId ? filtered.findIndex(r => r.id === lastVisibleId) + 1 : 0;
+        const paginatedRecords = filtered.slice(startIndex, startIndex + PAGE_SIZE);
+        const nextLastVisibleId = startIndex + PAGE_SIZE < filtered.length ? paginatedRecords[paginatedRecords.length - 1]?.id ?? null : null;
+        const attendeeIds = [...new Set(paginatedRecords.map(r => r.attendeeId).filter(Boolean as (s: string | null) => s is string))];
+        const courseIds = [...new Set(paginatedRecords.map(r => r.courseId))];
+        const [attendeesMap, coursesMap] = await Promise.all([
+            fetchDataMap<AttendeeData>(collection(db, 'attendees'), attendeeIds),
+            fetchDataMap<Course>(collection(db, 'courses'), courseIds),
+        ]);
+        return { records: paginatedRecords, attendeesMap: Object.fromEntries(attendeesMap), coursesMap: Object.fromEntries(coursesMap), hasMore: !!nextLastVisibleId, lastVisibleId: nextLastVisibleId };
+    }
 
-    // Due to Firestore limitations, we cannot perform a full-text search directly.
-    // The query will be broad, and then we'll filter in-memory.
-    // For a large-scale production app, a dedicated search service like Algolia or MeiliSearch is recommended.
+    // Cursor-based Firestore pagination (no text search)
     let recordsQuery = query(
         collection(db, 'trainingRecords'),
-        where('status', '==', 'completed')
+        where('status', '==', 'completed'),
+        orderBy('completionDate', 'desc'),
+        limit(PAGE_SIZE)
     );
-    
+
     if (companyFilter !== 'all') {
-        recordsQuery = query(recordsQuery, where('companyName', '==', companyFilter));
+        recordsQuery = query(
+            collection(db, 'trainingRecords'),
+            where('status', '==', 'completed'),
+            where('companyName', '==', companyFilter),
+            orderBy('completionDate', 'desc'),
+            limit(PAGE_SIZE)
+        );
+    }
+
+    if (lastVisibleId) {
+        const lastSnap = await getDoc(doc(collection(db, 'trainingRecords'), lastVisibleId));
+        if (lastSnap.exists()) {
+            recordsQuery = query(recordsQuery, startAfter(lastSnap));
+        }
     }
 
     const recordsSnapshot = await getDocs(recordsQuery);
-
-    const allRecords = recordsSnapshot.docs.map(doc => {
-        const data = doc.data();
-        return { 
-            id: doc.id, 
-            ...data,
+    const paginatedRecords = recordsSnapshot.docs.map(d => {
+        const data = d.data();
+        return {
+            id: d.id, ...data,
             completionDate: toISOStringSafe(data.completionDate),
             certificateIssueDate: toISOStringSafe(data.certificateIssueDate),
             expiryDate: data.expiryDate ? toISOStringSafe(data.expiryDate) : null,
         } as TrainingRecord;
     });
 
-    // --- In-memory filtering for search query ---
-    const searchLower = searchQuery.toLowerCase();
-    const filteredRecords = searchQuery ? allRecords.filter(record => 
-        record.attendeeName.toLowerCase().includes(searchLower) ||
-        record.companyName.toLowerCase().includes(searchLower)
-    ) : allRecords;
+    const nextLastVisibleId = paginatedRecords.length === PAGE_SIZE ? paginatedRecords[paginatedRecords.length - 1].id : null;
 
-    // --- In-memory Pagination ---
-    let paginatedRecords: TrainingRecord[] = [];
-    let nextLastVisibleId: string | null = null;
-    const startIndex = lastVisibleId ? filteredRecords.findIndex(r => r.id === lastVisibleId) + 1 : 0;
-    
-    if (startIndex < filteredRecords.length) {
-        paginatedRecords = filteredRecords.slice(startIndex, startIndex + PAGE_SIZE);
-        if (startIndex + PAGE_SIZE < filteredRecords.length) {
-            nextLastVisibleId = paginatedRecords[paginatedRecords.length - 1].id;
-        }
-    }
-
-    // --- Fetch related data only for the paginated results ---
     const attendeeIds = [...new Set(paginatedRecords.map(r => r.attendeeId).filter(Boolean as (s: string | null) => s is string))];
     const courseIds = [...new Set(paginatedRecords.map(r => r.courseId))];
 
@@ -82,7 +114,7 @@ export async function getPaginatedHistory({
         fetchDataMap<AttendeeData>(collection(db, 'attendees'), attendeeIds),
         fetchDataMap<Course>(collection(db, 'courses'), courseIds),
     ]);
-    
+
     return {
         records: paginatedRecords,
         attendeesMap: Object.fromEntries(attendeesMap),
@@ -233,8 +265,10 @@ export async function updateSingleAttendeeData(formData: FormData) {
         const profilePictureFile = formData.get('profilePicture') as File;
         if (profilePictureFile && profilePictureFile.size > 0 && newAttendeeId) {
             const fileRef = ref(storage, `attendees/${newAttendeeId}/profilePicture-${nanoid()}`);
-            await updateDoc(fileRef as any, profilePictureFile);
-            profileUpdates.profilePicture = await getDoc(fileRef).then(d => d.data()?.toString());
+            const arrayBuffer = await profilePictureFile.arrayBuffer();
+            const buffer = new Uint8Array(arrayBuffer);
+            await uploadBytes(fileRef, buffer);
+            profileUpdates.profilePicture = await getDownloadURL(fileRef);
         }
 
         if (attendeeProfileRef) {

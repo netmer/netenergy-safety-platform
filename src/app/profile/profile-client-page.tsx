@@ -3,8 +3,8 @@
 import { useAuth } from '@/context/auth-context';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, orderBy } from 'firebase/firestore';
-import { useMemo } from 'react';
-import type { Registration, TrainingRecord } from '@/lib/course-data';
+import { useMemo, useState } from 'react';
+import type { Registration, TrainingRecord, RegistrationAttendee } from '@/lib/course-data';
 
 import { AdminLogin } from '@/components/auth/admin-login';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -13,11 +13,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
-    Loader2, User, History, CheckCircle, Clock, 
-    XCircle, ArrowRight, ShieldCheck, Building, Award, 
+    Loader2, User, History, CheckCircle, Clock,
+    XCircle, ArrowRight, ShieldCheck, Building, Award,
     FileText, LayoutDashboard, Download, Eye, GraduationCap, Mail,
-    Calendar, AlertTriangle, ShieldX, Infinity, Users, Briefcase, PlusCircle, MessageSquare
+    Calendar, AlertTriangle, ShieldX, Infinity, Users, Briefcase, PlusCircle, MessageSquare,
+    ExternalLink, ClipboardList, UserCheck, UserX, CalendarClock
 } from 'lucide-react';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -46,7 +49,8 @@ export function ProfileClientPage() {
         );
     }, [user?.uid, firestore]);
     
-    const { data: registrations = [], isLoading: regLoading } = useCollection<Registration>(regQuery);
+    const { data: registrationsRaw, isLoading: regLoading } = useCollection<Registration>(regQuery);
+    const registrations = registrationsRaw ?? [];
 
     // Real-time Training Records linked to those registrations
     const regIds = useMemo(() => registrations?.map(r => r.id).slice(0, 30) || [], [registrations]);
@@ -59,7 +63,8 @@ export function ProfileClientPage() {
         );
     }, [regIds, firestore]);
 
-    const { data: teamRecords = [], isLoading: recordsLoading } = useCollection<TrainingRecord>(recordsQuery);
+    const { data: teamRecordsRaw, isLoading: recordsLoading } = useCollection<TrainingRecord>(recordsQuery);
+    const teamRecords = teamRecordsRaw ?? [];
     
     const stats = useMemo(() => {
         const uniqueAttendees = new Set(teamRecords?.map(r => r.attendeeName)).size;
@@ -280,42 +285,181 @@ function StatusBadge({ status }: { status: Registration['status'] }) {
     );
 }
 
+const attendeeStatusConfig = {
+    pending:   { label: 'รออนุมัติ',  icon: CalendarClock, cls: 'bg-amber-100 text-amber-800' },
+    confirmed: { label: 'ยืนยันแล้ว', icon: UserCheck,     cls: 'bg-green-100 text-green-800' },
+    postponed: { label: 'เลื่อนรอบ',  icon: Clock,          cls: 'bg-blue-100 text-blue-800'  },
+    cancelled: { label: 'ยกเลิก',     icon: UserX,          cls: 'bg-red-100 text-red-800'    },
+} as const;
+
 function RegistrationCard({ reg }: { reg: Registration }) {
-    const attendeeCount = Object.values(reg.formData).find(v => Array.isArray(v))?.length || 0;
+    const [open, setOpen] = useState(false);
+
+    const attendeeListField = reg.formSchema.find(f => f.type === 'attendee_list');
+    const attendees: RegistrationAttendee[] = attendeeListField
+        ? (reg.formData[attendeeListField.id] || []) as RegistrationAttendee[]
+        : [];
+    const fullNameSubField = attendeeListField?.subFields?.find(sf => sf.label.includes('ชื่อ-นามสกุล'));
+
+    const otherFields = reg.formSchema.filter(f =>
+        f.type !== 'attendee_list' && f.type !== 'header' && f.type !== 'page_break'
+    );
 
     return (
-        <Card className="rounded-2xl border-none shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden group border border-slate-100 dark:border-slate-800">
-            <div className="flex flex-col md:flex-row">
-                <div className="p-6 md:p-8 flex-grow space-y-4">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                        <div className="flex items-center gap-3">
-                            <StatusBadge status={reg.status} />
-                            <Badge variant="secondary" className="rounded-full bg-slate-50 dark:bg-slate-800 border-none font-bold text-[10px]">
-                                <Users className="w-3 h-3 mr-1" /> {attendeeCount} คน
-                            </Badge>
+        <>
+            <Card className="rounded-2xl border-none shadow-md hover:shadow-lg transition-all duration-300 overflow-hidden group border border-slate-100 dark:border-slate-800">
+                <div className="flex flex-col md:flex-row">
+                    <div className="p-6 md:p-8 flex-grow space-y-4">
+                        <div className="flex items-center justify-between flex-wrap gap-3">
+                            <div className="flex items-center gap-3">
+                                <StatusBadge status={reg.status} />
+                                <Badge variant="secondary" className="rounded-full bg-slate-50 dark:bg-slate-800 border-none font-bold text-[10px]">
+                                    <Users className="w-3 h-3 mr-1" /> {attendees.length} คน
+                                </Badge>
+                            </div>
+                            <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                                <Calendar className="w-3.5 h-3.5 text-primary/60" />
+                                {format(new Date(reg.registrationDate), 'd MMM yyyy', { locale: th })}
+                            </span>
                         </div>
-                        <span className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-primary/60" />
-                            {format(new Date(reg.registrationDate), 'd MMM yyyy', { locale: th })}
-                        </span>
+                        <div>
+                            <h3 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{reg.courseTitle}</h3>
+                            <p className="text-slate-500 mt-1.5 text-sm font-medium flex items-center gap-1.5">
+                                <Building className="w-3.5 h-3.5 opacity-40" /> {reg.clientCompanyName || 'ข้อมูลส่วนบุคคล'}
+                            </p>
+                        </div>
                     </div>
-                    <div>
-                        <h3 className="text-lg md:text-xl font-bold text-slate-900 dark:text-white leading-tight group-hover:text-primary transition-colors">{reg.courseTitle}</h3>
-                        <p className="text-slate-500 mt-1.5 text-sm font-medium flex items-center gap-1.5">
-                            <Building className="w-3.5 h-3.5 opacity-40" /> {reg.clientCompanyName || 'ข้อมูลส่วนบุคคล'}
-                        </p>
-                    </div>
-                </div>
-                <div className="bg-slate-50 dark:bg-slate-900/50 p-6 md:w-56 flex flex-col justify-center items-center border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 gap-3">
-                    <Button asChild variant="default" size="sm" className="w-full rounded-lg font-bold shadow-sm">
-                        <Link href={`/courses/course/${reg.courseId}`}>ดูรายละเอียด</Link>
-                    </Button>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center mt-1">
-                        ID: {reg.id.slice(0, 8)}
+                    <div className="bg-slate-50 dark:bg-slate-900/50 p-6 md:w-56 flex flex-col justify-center items-center border-t md:border-t-0 md:border-l border-slate-100 dark:border-slate-800 gap-3">
+                        <Button variant="default" size="sm" className="w-full rounded-lg font-bold shadow-sm" onClick={() => setOpen(true)}>
+                            <ClipboardList className="w-3.5 h-3.5 mr-1.5" /> ดูรายละเอียด
+                        </Button>
+                        <div className="text-[9px] text-slate-400 font-bold uppercase tracking-widest text-center mt-1">
+                            ID: {reg.id.slice(0, 8)}
+                        </div>
                     </div>
                 </div>
-            </div>
-        </Card>
+            </Card>
+
+            <Dialog open={open} onOpenChange={setOpen}>
+                <DialogContent className="sm:max-w-2xl rounded-[2rem] p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="p-6 pb-4 border-b bg-slate-50 dark:bg-slate-900">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <DialogTitle className="text-xl font-bold leading-tight">{reg.courseTitle}</DialogTitle>
+                                <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1.5">
+                                    <Building className="w-3.5 h-3.5" /> {reg.clientCompanyName || 'ข้อมูลส่วนบุคคล'}
+                                </p>
+                            </div>
+                            <StatusBadge status={reg.status} />
+                        </div>
+                        <div className="flex flex-wrap gap-3 mt-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1"><Calendar className="w-3 h-3" /> ลงทะเบียน: {format(new Date(reg.registrationDate), 'd MMM yyyy', { locale: th })}</span>
+                            <span className="flex items-center gap-1"><FileText className="w-3 h-3" /> ID: {reg.id.slice(0, 12)}</span>
+                        </div>
+                    </DialogHeader>
+
+                    <ScrollArea className="max-h-[60vh]">
+                        <div className="p-6 space-y-6">
+
+                            {/* Attendees */}
+                            {attendees.length > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-bold mb-3 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                                        <Users className="w-4 h-4 text-primary" /> รายชื่อผู้เข้าอบรม ({attendees.length} คน)
+                                    </h4>
+                                    <div className="border rounded-xl overflow-hidden">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-muted/20">
+                                                <tr>
+                                                    <th className="text-left p-2.5 font-semibold text-xs">#</th>
+                                                    <th className="text-left p-2.5 font-semibold text-xs">ชื่อ-นามสกุล</th>
+                                                    <th className="text-left p-2.5 font-semibold text-xs">สถานะ</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y">
+                                                {attendees.map((a, i) => {
+                                                    const cfg = attendeeStatusConfig[a.status] || attendeeStatusConfig.pending;
+                                                    const Icon = cfg.icon;
+                                                    const name = fullNameSubField ? (a[fullNameSubField.id] as string) : (a.fullName || 'ผู้อบรม');
+                                                    return (
+                                                        <tr key={a.id} className="hover:bg-muted/5">
+                                                            <td className="p-2.5 text-muted-foreground text-xs">{i + 1}</td>
+                                                            <td className="p-2.5 font-medium">{name}</td>
+                                                            <td className="p-2.5">
+                                                                <span className={cn('inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full', cfg.cls)}>
+                                                                    <Icon className="w-3 h-3" />{cfg.label}
+                                                                </span>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Other form fields */}
+                            {otherFields.length > 0 && (
+                                <div>
+                                    <h4 className="text-sm font-bold mb-3 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                                        <ClipboardList className="w-4 h-4 text-primary" /> ข้อมูลการลงทะเบียน
+                                    </h4>
+                                    <div className="space-y-2">
+                                        {otherFields.map(field => {
+                                            const value = reg.formData[field.id];
+                                            if (!value || (typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0)) return null;
+                                            if (field.type === 'coordinator') {
+                                                const c = value as any;
+                                                return (
+                                                    <div key={field.id} className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm">
+                                                        <span className="text-muted-foreground text-xs font-semibold">{field.label}</span>
+                                                        <span className="font-medium text-right text-xs">{c.name || ''} {c.tel ? `• ${c.tel}` : ''} {c.email ? `• ${c.email}` : ''}</span>
+                                                    </div>
+                                                );
+                                            }
+                                            if (field.type === 'address') {
+                                                const b = (value as any).billingAddress || {};
+                                                return (
+                                                    <div key={field.id} className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm">
+                                                        <span className="text-muted-foreground text-xs font-semibold">{field.label}</span>
+                                                        <span className="font-medium text-right text-xs max-w-[60%]">{[b.address1, b.subdistrict, b.district, b.province, b.postalCode].filter(Boolean).join(' ')}</span>
+                                                    </div>
+                                                );
+                                            }
+                                            if (typeof value === 'string' || typeof value === 'number') {
+                                                return (
+                                                    <div key={field.id} className="flex justify-between py-2 border-b border-slate-100 dark:border-slate-800 text-sm">
+                                                        <span className="text-muted-foreground text-xs font-semibold">{field.label}</span>
+                                                        <span className="font-medium text-right text-xs max-w-[60%]">{String(value)}</span>
+                                                    </div>
+                                                );
+                                            }
+                                            return null;
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Documents */}
+                            {(reg.quotationGenerated || reg.invoiceGenerated || reg.receiptGenerated) && (
+                                <div>
+                                    <h4 className="text-sm font-bold mb-3 flex items-center gap-2 text-slate-700 dark:text-slate-300">
+                                        <FileText className="w-4 h-4 text-primary" /> เอกสาร
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {reg.quotationUrl && <a href={reg.quotationUrl} target="_blank" rel="noreferrer"><Badge variant="outline" className="gap-1 cursor-pointer hover:bg-blue-50"><ExternalLink className="w-3 h-3" /> ใบเสนอราคา</Badge></a>}
+                                        {reg.invoiceUrl && <a href={reg.invoiceUrl} target="_blank" rel="noreferrer"><Badge variant="outline" className="gap-1 cursor-pointer hover:bg-green-50"><ExternalLink className="w-3 h-3" /> ใบแจ้งหนี้</Badge></a>}
+                                        {reg.receiptUrl && <a href={reg.receiptUrl} target="_blank" rel="noreferrer"><Badge variant="outline" className="gap-1 cursor-pointer hover:bg-purple-50"><ExternalLink className="w-3 h-3" /> ใบเสร็จ</Badge></a>}
+                                    </div>
+                                </div>
+                            )}
+
+                        </div>
+                    </ScrollArea>
+                </DialogContent>
+            </Dialog>
+        </>
     );
 }
 

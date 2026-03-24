@@ -24,7 +24,9 @@ import {
   ChevronRight,
   FileSignature,
   Network,
-  TestTube2
+  TestTube2,
+  FolderOpen,
+  ShieldCheck
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -110,6 +112,14 @@ export default function AdminLayout({ children }: React.PropsWithChildren) {
                         </SidebarMenu>
                     </SidebarGroup>
                 ))}
+                <SidebarGroup label="System Tools">
+                    <SidebarMenu>
+                        <SidebarMenuItem><Link href="/admin/documents"><SidebarMenuButton Icon={FolderOpen} isActive={pathname.startsWith('/admin/documents')}>เอกสาร & อีเมลหมู่</SidebarMenuButton></Link></SidebarMenuItem>
+                        <SidebarMenuItem><Link href="/admin/system-test"><SidebarMenuButton Icon={TestTube2} isActive={pathname.startsWith('/admin/system-test')}>ทดสอบระบบเมล</SidebarMenuButton></Link></SidebarMenuItem>
+                        <SidebarMenuItem><Link href="/admin/sync-test"><SidebarMenuButton Icon={Network} isActive={pathname.startsWith('/admin/sync-test')}>ทดสอบ API Sync</SidebarMenuButton></Link></SidebarMenuItem>
+                        <SidebarMenuItem><Link href="/admin/audit"><SidebarMenuButton Icon={ShieldCheck} isActive={pathname.startsWith('/admin/audit')}>Audit Log</SidebarMenuButton></Link></SidebarMenuItem>
+                    </SidebarMenu>
+                </SidebarGroup>
                 <SidebarGroup label="Other Systems">
                     <SidebarMenu>
                         <SidebarMenuItem><Link href="/erp"><SidebarMenuButton Icon={Shield} className="bg-primary/5 text-primary">ERP Dashboard</SidebarMenuButton></Link></SidebarMenuItem>

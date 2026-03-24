@@ -166,6 +166,25 @@ export type Registration = {
     invoiceId?: string;
     invoiceUrl?: string;
     invoiceGenerated?: boolean;
+    receiptId?: string;
+    receiptUrl?: string;
+    receiptGenerated?: boolean;
+    // Payment tracking
+    paymentStatus?: 'unpaid' | 'partial' | 'paid';
+    totalAmount?: number;
+    amountPaid?: number;
+    paymentHistory?: PaymentRecord[];
+};
+
+export type PaymentRecord = {
+    id: string;
+    amount: number;
+    paidDate: string;       // ISO string
+    method: 'transfer' | 'cash' | 'cheque' | 'other';
+    reference?: string;     // Bank ref or cheque number
+    notes?: string;
+    recordedBy: string;     // User display name
+    timestamp: string;      // ISO string of when recorded
 };
 
 export type AppUser = {
