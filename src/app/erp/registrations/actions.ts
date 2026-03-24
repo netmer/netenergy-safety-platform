@@ -289,7 +289,22 @@ export async function updateRegistrationStatus(id: string, status: RegistrationS
         if (!regSnap.exists()) throw new Error("Registration not found");
         const regData = regSnap.data() as Registration;
 
-        await updateDoc(registrationRef, { status });
+        // Cascade: delete training records when reverting to pending/cancelled
+        if (status === 'cancelled' || status === 'pending') {
+            const recordsSnap = await getDocs(
+                query(collection(db, 'trainingRecords'), where('registrationId', '==', id))
+            );
+            if (recordsSnap.size > 0) {
+                const batch = writeBatch(db);
+                recordsSnap.docs.forEach(d => batch.delete(d.ref));
+                batch.update(registrationRef, { status });
+                await batch.commit();
+            } else {
+                await updateDoc(registrationRef, { status });
+            }
+        } else {
+            await updateDoc(registrationRef, { status });
+        }
 
         // Audit log (fire-and-forget)
         writeAuditLog({
@@ -327,6 +342,7 @@ export async function updateRegistrationStatus(id: string, status: RegistrationS
         });
 
         revalidatePath('/erp/registrations');
+        revalidatePath('/erp/attendees');
         revalidatePath('/profile');
         return { success: true, message: 'อัปเดตสถานะและแจ้งเตือนอีเมลสำเร็จ' };
     } catch (e) {

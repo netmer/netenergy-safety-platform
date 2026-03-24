@@ -17,16 +17,18 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { 
-    MoreHorizontal, Trash2, Loader2, CheckCircle, Clock, XCircle, Edit, Users, 
-    UserCheck, CalendarPlus, Building, Calendar, FileText, FileSignature, Filter, 
-    ExternalLink, GraduationCap, Info, MapPin, CreditCard, Printer, History, 
-    AlertTriangle, DatabaseZap, User, Search, ChevronRight, CornerDownRight, RotateCcw
+    MoreHorizontal, Trash2, Loader2, CheckCircle, Clock, XCircle, Edit, Users,
+    UserCheck, CalendarPlus, Building, Calendar, FileText, FileSignature, Filter,
+    ExternalLink, GraduationCap, Info, MapPin, CreditCard, Printer, History,
+    AlertTriangle, DatabaseZap, User, Search, ChevronRight, CornerDownRight, RotateCcw,
+    Package
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { 
-    updateIndividualAttendeeStatus, deleteRegistration, createQuotationAction, 
+import {
+    updateIndividualAttendeeStatus, deleteRegistration, createQuotationAction,
     createInvoiceAction, rescheduleRegistrationAction, rescheduleIndividualAttendeesAction
 } from './actions';
+import { createDeliveryPackage } from '@/app/erp/delivery/actions';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, where, orderBy } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
@@ -163,6 +165,7 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
     const [reschedulingRegistration, setReschedulingRegistration] = useState<Registration | null>(null);
     const [rescheduleAttendeeIds, setRescheduleAttendeeIds] = useState<string[]>([]);
     const [registrationToDelete, setRegistrationToDelete] = useState<Registration | null>(null);
+    const [creatingDeliveryFor, setCreatingDeliveryFor] = useState<string | null>(null);
 
     // Dynamic Attendees selection for the active Registration Detail View
     const [selectedAttendeeIds, setSelectedAttendeeIds] = useState<Set<string>>(new Set());
@@ -188,6 +191,16 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
             if (result.success) toast({ title: 'สำเร็จ!', description: result.message });
             else toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: result.message });
             setProcessingId(null);
+        });
+    };
+
+    const handleCreateDelivery = (reg: Registration) => {
+        setCreatingDeliveryFor(reg.id);
+        startTransition(async () => {
+            const result = await createDeliveryPackage(reg.id, 'ERP Staff');
+            if (result.success) toast({ title: 'สร้างแพ็กเกจจัดส่งสำเร็จ', description: result.message });
+            else toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: result.message });
+            setCreatingDeliveryFor(null);
         });
     };
 
@@ -352,7 +365,7 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
             <div className="flex flex-col gap-4 text-left">
                 <div>
                     <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">จัดการข้อมูลลงทะเบียน</h1>
-                    <p className="text-muted-foreground mt-1 font-light">มุมมองแบบ Inbox Master-Detail รองรับข้อมูลมหาศาล</p>
+                    <p className="text-muted-foreground mt-1 font-light">ค้นหา กรอง และจัดการใบสมัครทั้งหมด</p>
                 </div>
                 <Card className="border-none shadow-sm rounded-3xl bg-white dark:bg-slate-900/40 p-6">
                     <CourseFilters 
@@ -463,9 +476,28 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
                                         </Button>
                                         <DropdownMenu>
                                             <DropdownMenuTrigger asChild><Button variant="outline" size="icon" className="rounded-xl h-10 w-10 shadow-sm"><MoreHorizontal className="w-4 h-4"/></Button></DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end" className="rounded-2xl p-2 w-48">
+                                            <DropdownMenuContent align="end" className="rounded-2xl p-2 w-52">
                                                 <DropdownMenuItem asChild className="rounded-xl font-semibold"><Link href={`/erp/registrations/edit/${selectedRegistration.id}`}><Edit className="w-4 h-4 mr-2"/> แก้ไขใบสมัคร</Link></DropdownMenuItem>
                                                 <DropdownMenuItem className="rounded-xl font-semibold" onClick={() => setReschedulingRegistration(selectedRegistration)}><History className="w-4 h-4 mr-2"/> เลื่อนรอบยกแก๊ง</DropdownMenuItem>
+                                                <DropdownMenuSeparator />
+                                                {selectedRegistration.status === 'confirmed' && !selectedRegistration.deliveryPackageId && (
+                                                    <DropdownMenuItem
+                                                        className="rounded-xl font-semibold"
+                                                        disabled={creatingDeliveryFor === selectedRegistration.id}
+                                                        onClick={() => handleCreateDelivery(selectedRegistration)}
+                                                    >
+                                                        {creatingDeliveryFor === selectedRegistration.id
+                                                            ? <Loader2 className="w-4 h-4 mr-2 animate-spin"/>
+                                                            : <Package className="w-4 h-4 mr-2"/>
+                                                        }
+                                                        สร้างแพ็กเกจจัดส่ง
+                                                    </DropdownMenuItem>
+                                                )}
+                                                {selectedRegistration.deliveryPackageId && (
+                                                    <DropdownMenuItem asChild className="rounded-xl font-semibold">
+                                                        <Link href="/erp/delivery"><Package className="w-4 h-4 mr-2"/> ดูการจัดส่ง</Link>
+                                                    </DropdownMenuItem>
+                                                )}
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem className="rounded-xl font-semibold text-destructive" onClick={() => setRegistrationToDelete(selectedRegistration)}><Trash2 className="w-4 h-4 mr-2"/> ลบใบสมัครนี้</DropdownMenuItem>
                                             </DropdownMenuContent>

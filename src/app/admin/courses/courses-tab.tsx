@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useActionState, useTransition, useMemo } from 'react';
-import type { Course, CourseCategory, CourseType, RegistrationForm, CertificateTemplate } from '@/lib/course-data';
+import type { Course, CourseCategory, CourseType, RegistrationForm, CertificateTemplate, DeliverableConfig, DeliverableType } from '@/lib/course-data';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -83,6 +83,16 @@ export function CoursesTab({ courses = [], categories = [], types = [], forms = 
     // Multi-select types logic
     const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
 
+    // Deliverables config
+    const DEFAULT_DELIVERABLES: DeliverableConfig[] = [
+        { type: 'pvc_card', label: 'บัตร PVC', enabled: false },
+        { type: 'prize', label: 'ของรางวัล', enabled: false },
+        { type: 'receipt_physical', label: 'ใบเสร็จ (ต้นฉบับ)', enabled: false },
+        { type: 'invoice_physical', label: 'ใบแจ้งหนี้ (ต้นฉบับ)', enabled: false },
+        { type: 'other', label: 'อื่นๆ', enabled: false, customLabel: '' },
+    ];
+    const [deliverables, setDeliverables] = useState<DeliverableConfig[]>(DEFAULT_DELIVERABLES);
+
     const [formState, formAction] = useActionState(submitCourse, initialCourseState);
 
     useEffect(() => {
@@ -108,26 +118,34 @@ export function CoursesTab({ courses = [], categories = [], types = [], forms = 
             .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0) || a.title.localeCompare(b.title));
     }, [courses, searchQuery, categoryFilter]);
 
-    const handleOpenCreateForm = () => { 
-        setCourseToEdit(null); 
+    const handleOpenCreateForm = () => {
+        setCourseToEdit(null);
         setSelectedTypes([]);
-        setIsFormOpen(true); 
+        setDeliverables(DEFAULT_DELIVERABLES);
+        setIsFormOpen(true);
     };
-    
-    const handleOpenEditForm = (course: Course) => { 
-        setCourseToEdit(course); 
+
+    const handleOpenEditForm = (course: Course) => {
+        setCourseToEdit(course);
         setSelectedTypes(Array.isArray(course.type) ? course.type : (course.type ? [course.type] : []));
-        setIsFormOpen(true); 
+        // Merge saved deliverables with defaults (in case new types added later)
+        const saved = course.deliverables || [];
+        setDeliverables(DEFAULT_DELIVERABLES.map(d => {
+            const found = saved.find(s => s.type === d.type);
+            return found ? { ...d, ...found } : d;
+        }));
+        setIsFormOpen(true);
     };
-    
+
     const handleOpenDeleteAlert = (course: Course) => { setCourseToDelete(course); setIsDeleteAlertOpen(true); };
-    
-    const handleCloseDialogs = () => { 
-        setIsFormOpen(false); 
-        setIsDeleteAlertOpen(false); 
+
+    const handleCloseDialogs = () => {
+        setIsFormOpen(false);
+        setIsDeleteAlertOpen(false);
         setCourseToEdit(null);
         setCourseToDelete(null);
         setSelectedTypes([]);
+        setDeliverables(DEFAULT_DELIVERABLES);
     };
 
     const handleTypeToggle = (typeName: string) => {
@@ -318,6 +336,33 @@ export function CoursesTab({ courses = [], categories = [], types = [], forms = 
                                 {courseToEdit?.image && (<div className="mt-2"><p className="text-sm font-medium">รูปภาพปัจจุบัน:</p><Image src={courseToEdit.image} alt={courseToEdit.title} width={150} height={100} className="rounded-md object-cover aspect-[3/2] border"/></div>)}
                             </div>
                             <div className="grid gap-2"><Label htmlFor="hint">คำใบ้รูปภาพ (สำหรับ AI)</Label><Input id="hint" name="hint" defaultValue={courseToEdit?.hint ?? ''} placeholder='เช่น safety training' /></div>
+                            <div className="grid gap-2">
+                                <Label>รายการจัดส่งหลังอบรม</Label>
+                                <p className="text-xs text-muted-foreground">เลือกรายการที่ต้องจัดส่งให้ลูกค้าหลังจากอบรมเสร็จ</p>
+                                <div className="border rounded-xl p-4 space-y-3">
+                                    {deliverables.map((d, idx) => (
+                                        <div key={d.type} className="flex items-center gap-3">
+                                            <Checkbox
+                                                id={`dlv-${d.type}`}
+                                                checked={d.enabled}
+                                                onCheckedChange={(checked) => {
+                                                    setDeliverables(prev => prev.map((item, i) => i === idx ? { ...item, enabled: !!checked } : item));
+                                                }}
+                                            />
+                                            <Label htmlFor={`dlv-${d.type}`} className="flex-1 cursor-pointer">{d.label}</Label>
+                                            {d.type === 'other' && d.enabled && (
+                                                <Input
+                                                    className="w-48 h-8 text-sm rounded-lg"
+                                                    placeholder="ระบุรายการ..."
+                                                    value={d.customLabel || ''}
+                                                    onChange={e => setDeliverables(prev => prev.map((item, i) => i === idx ? { ...item, customLabel: e.target.value } : item))}
+                                                />
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <input type="hidden" name="deliverables" value={JSON.stringify(deliverables)} />
+                            </div>
                             <DialogFooter>
                                 <DialogClose asChild><Button type="button" variant="ghost">ยกเลิก</Button></DialogClose>
                                 <SubmitButton isEditing={!!courseToEdit} />

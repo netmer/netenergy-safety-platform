@@ -400,7 +400,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
             <div className="flex flex-col gap-4 text-left">
                 <div>
                     <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">จัดการข้อมูลผู้อบรมประจำวัน</h1>
-                    <p className="text-muted-foreground mt-1 font-light">ระบบเช็คชื่อ เช็คข้อมูล และตัดเกรดการอบรม (Daily Operations)</p>
+                    <p className="text-muted-foreground mt-1 font-light">ระบบเช็คชื่อ เช็คข้อมูล และตัดเกรดการอบรม</p>
                 </div>
                 <Card className="border-none shadow-sm rounded-3xl bg-white dark:bg-slate-900/40 p-6">
                     <CourseFilters
@@ -706,7 +706,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 <div className="flex flex-col items-center justify-center opacity-30 mt-20 text-center">
                     <UserCheck className="w-20 h-20 mb-6 text-slate-400" />
                     <h2 className="text-3xl font-bold font-headline text-slate-600">กรุณาเลือกรอบอบรมคลาสด้านบน</h2>
-                    <p className="text-slate-500 mt-2">เพื่อเข้าสู่โหมด Daily Operations จัดการรายชื่อและบันทึกข้อมูลประจำคลาส</p>
+                    <p className="text-slate-500 mt-2">เพื่อจัดการรายชื่อและบันทึกข้อมูลประจำวัน</p>
                 </div>
             )}
 

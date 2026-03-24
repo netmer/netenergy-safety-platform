@@ -22,7 +22,8 @@ import {
   Settings,
   ChevronRight,
   X,
-  ChevronsRight
+  ChevronsRight,
+  Package
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +69,7 @@ const erpNavGroups = [
     label: "Records & Billing",
     items: [
       { href: '/erp/billing', label: 'การเงิน/บัญชี', Icon: CreditCard, roles: ['admin', 'accounting_team'] },
+      { href: '/erp/delivery', label: 'การจัดส่ง', Icon: Package, roles: ['admin', 'call_center', 'training_team'] },
       { href: '/erp/history', label: 'ประวัติการอบรม', Icon: History, roles: ['admin', 'training_team', 'inspection_team'] },
       { href: '/erp/certificate', label: 'พิมพ์ใบประกาศ', Icon: Award, roles: ['admin', 'training_team'] },
     ]

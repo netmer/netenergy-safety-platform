@@ -83,7 +83,7 @@ export function ScheduleClientPage({ schedules: initialSchedules, courses, categ
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 text-left">
                 <div>
                     <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">จัดการตารางอบรม</h1>
-                    <p className="text-muted-foreground mt-1 font-light">บริหารจัดการรอบการอบรมและรายชื่อวิทยากรผู้สอนแบบ Real-time</p>
+                    <p className="text-muted-foreground mt-1 font-light">บริหารจัดการรอบการอบรมและรายชื่อวิทยากร</p>
                 </div>
                 <Button size="lg" className="rounded-2xl h-14 px-8 shadow-xl font-bold"><PlusCircle className="mr-2 h-5 w-5" /> เพิ่มรอบใหม่</Button>
             </div>

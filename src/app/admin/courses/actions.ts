@@ -20,6 +20,7 @@ const CourseFormSchema = z.object({
   validityYears: z.coerce.number().optional().nullable(),
   registrationFormId: z.string().optional().nullable(),
   certificateTemplateId: z.string().optional().nullable(),
+  deliverables: z.string().optional().nullable(), // JSON serialized DeliverableConfig[]
   objectives: z.string().optional().nullable().transform((val) => (val ? val.split('\n').map((item) => item.trim()).filter(Boolean) : [])),
   topics: z.string().optional().nullable().transform((val) => (val ? val.split('\n').map((item) => item.trim()).filter(Boolean) : [])),
   agenda: z.string().optional().nullable().transform((val) => (val ? val.split('\n').map((item) => item.trim()).filter(Boolean) : [])),
@@ -111,9 +112,11 @@ export async function submitCourse(prevState: FormState, formData: FormData): Pr
             if (oldImageUrl) await deleteImage(oldImageUrl);
         }
 
-        const { id: _, ...updateData } = data;
+        const { id: _, deliverables: deliverableJson, ...updateData } = data;
+        const deliverables = deliverableJson ? JSON.parse(deliverableJson) : [];
         await updateDoc(courseRef, {
             ...updateData,
+            deliverables,
             image: finalImageUrl,
             hint: data.hint || 'training course'
         });
@@ -124,9 +127,11 @@ export async function submitCourse(prevState: FormState, formData: FormData): Pr
             imageUrl = await serverUploadFile(imageFile, 'courses');
         }
 
-        const { id: _, ...createData } = data;
+        const { id: _, deliverables: deliverableJsonCreate, ...createData } = data;
+        const deliverables = deliverableJsonCreate ? JSON.parse(deliverableJsonCreate) : [];
         await addDoc(collection(db, 'courses'), {
             ...createData,
+            deliverables,
             orderIndex: 0,
             image: imageUrl,
             hint: data.hint || 'training course',

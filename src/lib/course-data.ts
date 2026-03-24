@@ -30,6 +30,7 @@ export type Course = {
   registrationFormId?: string;
   certificateTemplateId?: string;
   validityYears?: number; // New field for certificate validity in years
+  deliverables?: DeliverableConfig[]; // Post-training items to ship
 };
 
 export type CourseType = {
@@ -174,6 +175,8 @@ export type Registration = {
     totalAmount?: number;
     amountPaid?: number;
     paymentHistory?: PaymentRecord[];
+    // Delivery tracking
+    deliveryPackageId?: string;
 };
 
 export type PaymentRecord = {
@@ -251,6 +254,52 @@ export type PageViewData = {
 export type ReferrerData = {
     referrer: string;
     visitors: number;
+};
+
+// --- Delivery System ---
+
+export type DeliverableType = 'pvc_card' | 'prize' | 'receipt_physical' | 'invoice_physical' | 'other';
+
+export type DeliverableConfig = {
+    type: DeliverableType;
+    label: string;         // Thai label e.g. "บัตร PVC"
+    enabled: boolean;
+    customLabel?: string;  // Used when type === 'other'
+};
+
+export type DeliveryItemStatus = 'รอดำเนินการ' | 'กำลังเตรียม' | 'จัดส่งแล้ว' | 'ได้รับแล้ว' | 'ไม่มี';
+
+export type DeliveryItem = {
+    type: DeliverableType;
+    label: string;
+    status: DeliveryItemStatus;
+    updatedAt: string;
+    updatedBy: string;
+    notes?: string;
+};
+
+export type DeliveryPackage = {
+    id: string;
+    registrationId: string;
+    courseId: string;
+    courseTitle: string;
+    scheduleId: string;
+    scheduleDate: string;
+    clientCompanyName: string;
+    recipientName: string;
+    recipientAddress: {
+        address1: string;
+        subdistrict: string;
+        district: string;
+        province: string;
+        postalCode: string;
+    };
+    overallStatus: DeliveryItemStatus;
+    items: DeliveryItem[];
+    createdAt: string;
+    createdBy: string;
+    notes?: string;
+    trackingNumber?: string;
 };
 
 // Notification System Types
