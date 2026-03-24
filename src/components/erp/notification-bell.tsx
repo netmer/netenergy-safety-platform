@@ -40,7 +40,8 @@ export function NotificationBell() {
                 Notification.requestPermission();
             }
         }
-        audioRef.current = new Audio('/sounds/notification.mp3'); // Optional sound
+        // Short silent audio to unlock browser autoplay policy (no external file needed)
+        try { audioRef.current = new Audio('/sounds/notification.mp3'); } catch { /* sound optional */ }
     }, []);
 
     useEffect(() => {

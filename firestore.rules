@@ -50,7 +50,8 @@ service cloud.firestore {
 
     // Business Logic
     match /registrations/{registrationId} {
-      allow get, list: if isOwner(resource.data.userId) || isERPStaff();
+      allow get: if isOwner(resource.data.userId) || isERPStaff();
+      allow list: if isERPStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isSignedIn();
       allow update, delete: if isERPStaff();
     }
@@ -79,6 +80,27 @@ service cloud.firestore {
     match /mail/{mailId} {
       allow create: if isSignedIn();
       allow get, list, update, delete: if isAdmin();
+    }
+
+    // Delivery Packages
+    match /deliveryPackages/{packageId} {
+      allow get, list: if isERPStaff();
+      allow create, update: if isERPStaff();
+      allow delete: if isAdmin();
+    }
+
+    // Audit Log
+    match /auditLog/{logId} {
+      allow create: if isERPStaff();
+      allow get, list: if isAdmin();
+      allow delete: if false;
+    }
+
+    // Notifications
+    match /notifications/{notifId} {
+      allow get, list: if isERPStaff();
+      allow create, update: if isERPStaff();
+      allow delete: if isAdmin();
     }
   }
 }
