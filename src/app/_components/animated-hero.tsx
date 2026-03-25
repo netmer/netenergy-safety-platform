@@ -80,7 +80,7 @@ export function AnimatedHero() {
         >
             <motion.div variants={itemVariants} className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 backdrop-blur-md text-white/90 text-xs sm:text-sm font-semibold mb-6 sm:mb-8 mx-auto hover:bg-white/20 transition-colors cursor-default">
                 <ShieldCheck className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-primary" />
-                ผู้นำด้านการฝึกอบรมความปลอดภัยอันดับ 1
+                ฝึกอบรมความปลอดภัย ถูกต้องตามกฎหมาย มากกว่า 15 ปี
             </motion.div>
 
             <motion.div variants={itemVariants} className="relative mb-4 sm:mb-6">
@@ -98,9 +98,9 @@ export function AnimatedHero() {
                 variants={itemVariants}
                 className="mt-4 sm:mt-8 text-base sm:text-lg md:text-xl text-slate-300 max-w-2xl mx-auto leading-relaxed font-light px-4"
             >
-                เราคือพาร์ทเนอร์ที่พร้อมขับเคลื่อน 
-                <span className="text-white font-medium"> วัฒนธรรมความปลอดภัย</span> 
-                <span className="hidden sm:inline text-slate-400"> ด้วยนวัตกรรม AI และประสบการณ์ระดับมืออาชีพ</span>
+                ให้บริการฝึกอบรมด้านความปลอดภัยและอาชีวอนามัย
+                <span className="text-white font-medium"> ทั้งแบบ Public Training และ In-house</span>
+                <span className="hidden sm:inline text-slate-400"> สำหรับองค์กรทั่วประเทศ</span>
             </motion.p>
 
             <motion.div
@@ -129,7 +129,7 @@ export function AnimatedHero() {
                 {[
                     { label: 'ผู้ผ่านการอบรม', val: '100k+' },
                     { label: 'องค์กรชั้นนำ', val: '500+' },
-                    { label: 'ความพึงพอใจ', val: '98%' },
+                    { label: 'หลักสูตรมาตรฐาน', val: '50+' },
                     { label: 'พร้อมให้บริการ', val: '24/7' },
                 ].map((stat, i) => (
                     <div key={i} className="flex flex-col items-center">

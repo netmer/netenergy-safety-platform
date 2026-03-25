@@ -34,9 +34,9 @@ export function AnimatedCTA() {
                 transition={{ delay: 0.1, duration: 0.6 }}
                 className="text-4xl md:text-6xl font-bold text-white mb-6 tracking-tight leading-tight"
             >
-                พร้อมยกระดับความปลอดภัย<br />
+                ต้องการจัดอบรม<br />
                 <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300">
-                    สู่มาตรฐานอนาคตแล้วหรือยัง?
+                    ให้ทีมของคุณ?
                 </span>
             </motion.h2>
 
@@ -47,7 +47,7 @@ export function AnimatedCTA() {
                 transition={{ delay: 0.2, duration: 0.6 }}
                 className="text-lg md:text-xl text-slate-300 mb-12 max-w-2xl mx-auto"
             >
-                เริ่มต้นวันนี้ด้วยระบบ AI อัจฉริยะที่จะช่วยวิเคราะห์และแนะนำหลักสูตรที่เหมาะสมที่สุดสำหรับองค์กรของคุณ ฟรี ไม่มีค่าใช้จ่าย
+                ลองใช้ระบบแนะนำหลักสูตรอัตโนมัติ บอกข้อมูลองค์กรและลักษณะงาน แล้วรับรายการหลักสูตรที่ตรงกับกฎหมายของคุณ หรือติดต่อทีมงานโดยตรงเพื่อรับใบเสนอราคา
             </motion.p>
 
             <motion.div

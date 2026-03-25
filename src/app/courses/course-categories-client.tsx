@@ -11,8 +11,9 @@ const CategoryCard = ({ category, delay = 0, index = 0 }: { category: CourseCate
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-50px" }}
+      transition={{ duration: 0.4, delay, ease: [0.22, 1, 0.36, 1] }}
       className="group relative block overflow-hidden rounded-[2.5rem] shadow-lg hover:shadow-2xl transition-all duration-500 h-[420px] bg-slate-100 dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800/50"
     >
         <Link href={`/courses/${category.id}`} className="block h-full w-full relative">
@@ -20,7 +21,9 @@ const CategoryCard = ({ category, delay = 0, index = 0 }: { category: CourseCate
                 src={category.image || `https://picsum.photos/seed/cat-${index}/800/800`}
                 alt={category.title}
                 fill
-                className="absolute inset-0 h-full w-full object-cover transition-transform duration-1000 ease-out group-hover:scale-110"
+                priority={index < 2}
+                sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-110 will-change-transform"
                 data-ai-hint={category.hint || "safety category"}
             />
             {/* Gradient Overlay */}
@@ -104,14 +107,19 @@ export default function CourseCategoriesClient({ categories }: CourseCategoriesC
                     <Link href="/compliance-checker" className="group relative h-full flex flex-col justify-center p-8 rounded-[2.5rem] bg-slate-950 text-white shadow-2xl hover:shadow-primary/30 transition-all duration-700 overflow-hidden border border-white/10">
                          {/* Animated background elements */}
                         <div className="absolute top-0 right-0 w-full h-full pointer-events-none">
-                            <div className="absolute top-[-20%] right-[-10%] w-[70%] h-[70%] bg-primary/20 rounded-full blur-[100px] group-hover:bg-primary/40 transition-colors duration-1000"></div>
+                            <div className="absolute top-[-20%] right-[-10%] w-[70%] h-[70%] bg-primary/20 rounded-full blur-[100px] will-change-transform"></div>
+                            <div className="absolute top-[-20%] right-[-10%] w-[70%] h-[70%] bg-primary/40 rounded-full blur-[100px] opacity-0 group-hover:opacity-100 transition-opacity duration-700 will-change-transform"></div>
                             <div className="absolute bottom-[-10%] left-[-5%] w-[50%] h-[50%] bg-blue-500/10 rounded-full blur-[80px]"></div>
                         </div>
                         
                         <div className="relative z-10">
-                            <div className="inline-flex p-3 bg-white/5 border border-white/10 rounded-2xl mb-6 backdrop-blur-xl group-hover:scale-110 transition-transform duration-700">
-                                <Sparkles className="h-8 w-8 text-primary animate-pulse" />
-                            </div>
+                            <motion.div
+                                className="inline-flex p-3 bg-white/5 border border-white/10 rounded-2xl mb-6 backdrop-blur-xl"
+                                animate={{ scale: [1, 1.08, 1] }}
+                                transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
+                            >
+                                <Sparkles className="h-8 w-8 text-primary" />
+                            </motion.div>
                             <h2 className="text-2xl md:text-4xl font-semibold mb-4 tracking-tight leading-[1.1] font-headline">
                                 ค้นหาหลักสูตร<br/>ด้วยระบบ <span className="text-primary italic">AI Advisor</span>
                             </h2>
@@ -127,10 +135,10 @@ export default function CourseCategoriesClient({ categories }: CourseCategoriesC
                 
                 {/* Category cards */}
                 {categories.map((category, index) => (
-                    <CategoryCard 
-                        key={category.id} 
-                        category={category} 
-                        delay={0.1 + (index * 0.05)}
+                    <CategoryCard
+                        key={category.id}
+                        category={category}
+                        delay={index * 0.04}
                         index={index}
                     />
                 ))}

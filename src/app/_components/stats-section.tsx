@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Users, BookOpen, Award, Smile } from 'lucide-react';
+import { Users, BookOpen, Award, Building2 } from 'lucide-react';
 
 const stats = [
   {
@@ -20,9 +20,9 @@ const stats = [
     label: 'ปีแห่งความเชี่ยวชาญ',
   },
   {
-    icon: <Smile className="w-8 h-8" />,
-    value: '98%',
-    label: 'ความพึงพอใจสูงสุด',
+    icon: <Building2 className="w-8 h-8" />,
+    value: '500+',
+    label: 'องค์กรทั่วประเทศ',
   },
 ];
 

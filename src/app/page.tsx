@@ -3,7 +3,7 @@ import { AnimatedHero } from './_components/animated-hero';
 import { FeaturesSection } from './_components/features-section';
 import { AnimatedCTA } from './_components/cta-section';
 import { StatsSection } from './_components/stats-section';
-import { TestimonialsSection } from './_components/testimonials-section';
+import { IndustriesSection } from './_components/industries-section';
 import { ClientLogoTicker } from './_components/client-ticker';
 import { SocialSection } from './_components/social-section';
 import { CertificationsSection } from './_components/certifications-section';
@@ -73,7 +73,7 @@ export default async function HomePage() {
 
       <CertificationsSection certifications={certifications} />
 
-      <TestimonialsSection />
+      <IndustriesSection />
 
       <SocialSection />
 

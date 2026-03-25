@@ -129,11 +129,13 @@ export default async function CategoryCoursesPage({ params }: Props) {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
               {subCategories.map((sub, index) => (
                   <Link key={sub.id} href={`/courses/${sub.id}`} className="group relative block h-[350px] rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500">
-                      <Image 
+                      <Image
                         src={sub.image || `https://picsum.photos/seed/sub-${index}/800/600`}
                         alt={sub.title}
                         fill
-                        className="object-cover transition-transform duration-1000 group-hover:scale-110"
+                        priority={index < 2}
+                        sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                        className="object-cover transition-transform duration-500 group-hover:scale-110 will-change-transform"
                         data-ai-hint={sub.hint}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-900/40 to-transparent opacity-80 group-hover:opacity-95 transition-opacity"></div>

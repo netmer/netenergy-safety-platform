@@ -43,6 +43,9 @@ export function Footer() {
               <Link href="/contact" className="text-sm text-muted-foreground hover:text-primary transition-colors">
                 ติดต่อเรา
               </Link>
+              <Link href="/privacy-policy" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                นโยบายความเป็นส่วนตัว
+              </Link>
             </nav>
           </div>
 

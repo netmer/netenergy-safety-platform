@@ -8,6 +8,7 @@ import { PageViewTracker } from '@/components/page-view-tracker';
 import { SearchProvider } from "@/context/search-context";
 import { SmartSearch } from "@/components/smart-search";
 import { FirebaseClientProvider } from "@/firebase";
+import { CookieConsentBanner } from "@/components/cookie-consent-banner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
     return (
@@ -21,6 +22,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <Toaster />
             <BottomNavBar />
             <SmartSearch />
+            <CookieConsentBanner />
           </SearchProvider>
         </AuthProvider>
       </FirebaseClientProvider>

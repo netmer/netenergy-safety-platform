@@ -108,13 +108,15 @@ export default function CourseList({ courses }: CourseListProps) {
                     transition={{ duration: 0.4, delay: index * 0.03 }}
                 >
                     <Link href={`/courses/course/${course.id}`} className="group block h-full">
-                    <Card className="flex flex-col h-full overflow-hidden border-none shadow-lg hover:shadow-xl transition-all duration-500 hover:-translate-y-2 bg-white dark:bg-slate-950 rounded-[1.5rem]">
+                    <Card className="flex flex-col h-full overflow-hidden border-none shadow-lg hover:shadow-xl transition-all duration-500 hover:-translate-y-2 will-change-transform bg-white dark:bg-slate-950 rounded-[1.5rem]">
                         <div className="relative aspect-[16/10] overflow-hidden">
                             <Image
                                 src={course.image || `https://picsum.photos/seed/course-${course.id}/600/400`}
                                 alt={course.title}
                                 fill
-                                className="object-cover transition-transform duration-700 group-hover:scale-110"
+                                priority={index < 4}
+                                sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1280px) 33vw, 25vw"
+                                className="object-cover transition-transform duration-500 group-hover:scale-110 will-change-transform"
                                 data-ai-hint={course.hint || "safety training"}
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-slate-900/10 to-transparent" />
