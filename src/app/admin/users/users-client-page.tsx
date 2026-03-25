@@ -22,7 +22,7 @@ const initialFormState: UserFormState = { message: '', errors: {} };
 
 const roleConfig: Record<AppUser['role'], { label: string; className: string }> = {
     admin: { label: 'Admin', className: 'bg-destructive text-destructive-foreground' },
-    call_center: { label: 'Call Center', className: 'bg-blue-600 text-white' },
+    course_specialist: { label: 'Course Specialist', className: 'bg-blue-600 text-white' },
     training_team: { label: 'Training Team', className: 'bg-amber-600 text-white' },
     inspection_team: { label: 'Inspection Team', className: 'bg-green-600 text-white' },
     accounting_team: { label: 'Accounting', className: 'bg-purple-600 text-white' },
@@ -155,7 +155,7 @@ export function UsersClientPage({ users }: { users: AppUser[] }) {
                         </div>
                         <div className="grid gap-2">
                             <Label htmlFor="role">บทบาท</Label>
-                            <Select name="role" defaultValue={userToEdit?.role ?? 'call_center'} required>
+                            <Select name="role" defaultValue={userToEdit?.role ?? 'course_specialist'} required>
                                 <SelectTrigger><SelectValue placeholder="เลือกบทบาท" /></SelectTrigger>
                                 <SelectContent>
                                     {Object.entries(roleConfig).map(([key, {label}]) => (

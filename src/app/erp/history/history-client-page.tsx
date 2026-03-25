@@ -585,11 +585,7 @@ export function HistoryClientPage({ courses, companies }: { courses: Course[]; c
                 {/* Filters card */}
                 <Card>
                     <CardHeader className="pb-3">
-                        <div className="flex items-center justify-between">
-                            <div>
-                                <CardTitle>ประวัติการอบรม</CardTitle>
-                                <CardDescription>ค้นหาและตรวจสอบประวัติผู้ที่ผ่านการอบรมทั้งหมด</CardDescription>
-                            </div>
+                        <div className="flex items-center justify-end">
                             {isActiveFilters && (
                                 <Button variant="ghost" size="sm" onClick={clearFilters} className="text-muted-foreground">
                                     <FilterX className="w-4 h-4 mr-1.5" /> ล้างตัวกรอง

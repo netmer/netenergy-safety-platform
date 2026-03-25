@@ -10,7 +10,7 @@ import type { AppUser } from '@/lib/course-data';
 const UserSchema = z.object({
   email: z.string().email({ message: 'รูปแบบอีเมลไม่ถูกต้อง' }),
   displayName: z.string().min(1, { message: 'กรุณากรอกชื่อที่แสดง' }),
-  role: z.enum(['admin', 'call_center', 'training_team', 'inspection_team'], {
+  role: z.enum(['admin', 'course_specialist', 'training_team', 'inspection_team', 'accounting_team'], {
     errorMap: () => ({ message: 'กรุณาเลือกบทบาท' }),
   }),
 });

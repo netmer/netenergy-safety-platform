@@ -14,7 +14,7 @@ import Link from 'next/link';
 import type { AppUser } from '@/lib/course-data';
 import { cn } from '@/lib/utils';
 
-const ERP_ROLES: AppUser['role'][] = ['admin', 'call_center', 'training_team', 'inspection_team'];
+const ERP_ROLES: AppUser['role'][] = ['admin', 'course_specialist', 'training_team', 'inspection_team', 'accounting_team'];
 
 interface UserAuthNavProps {
   scrolled?: boolean;

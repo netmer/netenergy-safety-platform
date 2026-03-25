@@ -9,7 +9,7 @@ import { useFirestore } from '@/firebase';
 import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, CheckCircle2, AlertCircle, UserPlus, Building, Phone, Mail } from 'lucide-react';
-import { validateThaiID } from '@/components/erp/edit-attendee-modal';
+import { validateThaiID } from '@/lib/attendee-utils';
 import type { TrainingSchedule } from '@/lib/course-data';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';

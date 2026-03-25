@@ -8,8 +8,9 @@ export const metadata = {
     title: 'การจัดส่ง | NET ERP',
 };
 
-export default async function DeliveryPage() {
+export default async function DeliveryPage({ searchParams }: { searchParams: Promise<{ scheduleId?: string }> }) {
     noStore();
+    const { scheduleId } = await searchParams;
     // Only fetch public collections server-side; deliveryPackages are fetched client-side (requires auth)
     const [courseSnap, schedSnap] = await Promise.all([
         getDocs(collection(db, 'courses')),
@@ -19,5 +20,5 @@ export default async function DeliveryPage() {
     const courses = courseSnap.docs.map(d => ({ id: d.id, ...d.data() } as Course));
     const schedules = schedSnap.docs.map(d => ({ id: d.id, ...d.data() } as TrainingSchedule));
 
-    return <DeliveryClientPage courses={courses} schedules={schedules} />;
+    return <DeliveryClientPage courses={courses} schedules={schedules} initialScheduleId={scheduleId ?? null} />;
 }

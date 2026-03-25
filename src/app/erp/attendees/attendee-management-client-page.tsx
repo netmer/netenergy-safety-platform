@@ -1,7 +1,10 @@
 'use client';
 
-import React, { useState, useMemo, useTransition, useEffect } from 'react';
-import type { TrainingSchedule, Course, CourseCategory, AttendeeData, TrainingRecord, RegistrationFormField, AttendeeStatus, AttendeeAttendanceStatus } from '@/lib/course-data';
+import React, { useState, useMemo, useTransition, useEffect, useCallback } from 'react';
+import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { TrainingSchedule, Course, CourseCategory, AttendeeData, TrainingRecord, RegistrationFormField, AttendeeStatus, AttendeeAttendanceStatus, CertificateTemplate as TemplateType } from '@/lib/course-data';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
@@ -19,7 +22,8 @@ import {
     Clock, BookCheck, ShieldCheck, XCircle, UserRound, UserRoundX,
     CalendarClock, Loader2, PlusCircle, Building, Users, Download,
     History, Edit3, UserCheck, Calendar, User, Printer, CreditCard,
-    CheckCircle2, TrendingUp, UserPlus, ChevronDown, Upload, AlertCircle
+    CheckCircle2, TrendingUp, UserPlus, ChevronDown, Upload, AlertCircle,
+    Award, ExternalLink, ArrowLeft, GripVertical
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
@@ -30,7 +34,10 @@ import { useToast } from '@/hooks/use-toast';
 import { CaregiverSelect } from '@/components/erp/caregiver-select';
 import { EditAttendeeModal } from '@/components/erp/edit-attendee-modal';
 import { AddWalkinAttendeeModal } from '@/components/erp/add-walkin-attendee-modal';
-import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, type BulkImportRow } from '@/app/erp/attendees/actions';
+import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, updateTrainingRecord, updateAttendeeOrder, type BulkImportRow } from '@/app/erp/attendees/actions';
+import { validateThaiID } from '@/lib/attendee-utils';
+import Link from 'next/link';
+import { CertificateTemplate } from '@/app/erp/certificate/certificate-template';
 
 type StatusFilter = 'all' | 'pending' | 'verified';
 
@@ -47,20 +54,66 @@ const attendanceStatusConfig: Record<AttendeeAttendanceStatus, { label: string; 
     not_checked_in: { label: 'ยังไม่เช็คชื่อ', icon: CalendarClock, badgeClass: 'bg-slate-100 text-slate-800 border-slate-200 border-dashed' },
 };
 
-export function AttendeeManagementClientPage({ schedules, courses, categories, registrations }: {
+// ── Sortable row wrapper (must be outside parent component to avoid remounting) ──
+function SortableRowWrapper({ id, index, isSelected, children }: {
+    id: string;
+    index: number;
+    isSelected: boolean;
+    children: React.ReactNode;
+}) {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+    return (
+        <TableRow
+            ref={setNodeRef}
+            style={{ transform: CSS.Transform.toString(transform), transition }}
+            className={cn(
+                'hover:bg-white dark:hover:bg-slate-900 transition-colors group',
+                isSelected ? 'bg-indigo-50/60 dark:bg-indigo-950/30' : '',
+                isDragging ? 'shadow-2xl z-50 opacity-95 bg-white dark:bg-slate-900 ring-2 ring-primary/30' : '',
+            )}
+        >
+            {/* Drag handle + sequence number */}
+            <TableCell className="pl-3 pr-1 w-[72px]">
+                <div className="flex items-center gap-1.5">
+                    <button
+                        {...attributes}
+                        {...listeners}
+                        className="touch-none cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors p-1 rounded-md hover:bg-slate-100"
+                        tabIndex={-1}
+                        aria-label="ลากเพื่อเรียงลำดับ"
+                    >
+                        <GripVertical className="w-4 h-4" />
+                    </button>
+                    <span className="font-mono text-xs font-bold text-slate-400 w-5 text-right select-none">{index + 1}</span>
+                </div>
+            </TableCell>
+            {children}
+        </TableRow>
+    );
+}
+
+export function AttendeeManagementClientPage({ schedules, courses, categories, registrations, templates = [], initialScheduleId }: {
     schedules: TrainingSchedule[],
     courses: Course[],
     categories: CourseCategory[],
-    registrations?: { id: string; formSchema: RegistrationFormField[] }[]
+    registrations?: { id: string; formSchema: RegistrationFormField[] }[],
+    templates?: TemplateType[],
+    initialScheduleId?: string | null,
 }) {
     const { profile } = useAuth();
     const firestore = useFirestore();
     const { toast } = useToast();
     const [isPending, startTransition] = useTransition();
 
+    const canManageAttendance = profile?.role === 'admin' || profile?.role === 'training_team';
+    const canVerifyDocs = profile?.role === 'admin' || profile?.role === 'inspection_team';
+    const canComplete = profile?.role === 'admin' || profile?.role === 'training_team';
+    const canEdit = profile?.role === 'admin' || profile?.role === 'training_team';
+    const isInspectionTeam = profile?.role === 'inspection_team';
+
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [courseFilter, setCourseFilter] = useState<string>('all');
-    const [scheduleFilter, setScheduleFilter] = useState<string>('all');
+    const [scheduleFilter, setScheduleFilter] = useState<string>(initialScheduleId ?? 'all');
     const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -83,6 +136,11 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
 
     // Smart Card Reader State
     const [isReadingCard, setIsReadingCard] = useState<string | null>(null);
+
+    // Certificate Preview State
+    const [recordForCertificate, setRecordForCertificate] = useState<TrainingRecord | null>(null);
+    const [isPrintingCertificate, setIsPrintingCertificate] = useState<string | null>(null); // recordId being processed
+    const [isBulkPrintMode, setIsBulkPrintMode] = useState(false);
 
     // Bulk Selection State
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -136,6 +194,68 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         return { ...schedule, courseTitle: course?.shortName || schedule.courseTitle || 'N/A' };
     }, [scheduleFilter, schedules, courses]);
 
+    const coursesMap = useMemo(() => new Map(courses.map(c => [c.id, c])), [courses]);
+    const schedulesMap = useMemo(() => new Map(schedules.map(s => [s.id, s])), [schedules]);
+    const templatesMap = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates]);
+
+    // ── Row ordering ──────────────────────────────────────────────
+    // null = let Firestore seatNumber drive the order; array = local optimistic order
+    const [orderedIds, setOrderedIds] = useState<string[] | null>(null);
+
+    // Sorted view: respect seatNumber from Firestore when no local order is set
+    const displayRecords = useMemo(() => {
+        const byId = new Map(filteredRecords.map(r => [r.id, r]));
+        if (orderedIds) {
+            const known = orderedIds.filter(id => byId.has(id)).map(id => byId.get(id)!);
+            const added = filteredRecords.filter(r => !orderedIds.includes(r.id));
+            return [...known, ...added];
+        }
+        return [...filteredRecords].sort((a, b) => {
+            const an = Number(a.seatNumber) || 99999;
+            const bn = Number(b.seatNumber) || 99999;
+            return an !== bn ? an - bn : a.attendeeName.localeCompare(b.attendeeName);
+        });
+    }, [filteredRecords, orderedIds]);
+
+    // Merge local order when Firestore sends updates
+    useEffect(() => {
+        setOrderedIds(prev => {
+            if (!prev) return null;
+            const ids = new Set(filteredRecords.map(r => r.id));
+            const kept = prev.filter(id => ids.has(id));
+            return kept.length > 0 ? kept : null;
+        });
+    }, [filteredRecords]);
+
+    // Records to include in bulk print: selected completed, or all completed if no selection (respects display order)
+    const recordsToPrint = useMemo(() => {
+        const completed = displayRecords.filter(r => r.status === 'completed' && r.certificateId);
+        const selectedCompleted = completed.filter(r => selectedIds.has(r.id));
+        return selectedCompleted.length > 0 ? selectedCompleted : completed;
+    }, [displayRecords, selectedIds]);
+
+    const sensors = useSensors(
+        useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+        useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    );
+
+    const handleDragEnd = useCallback((event: DragEndEvent) => {
+        const { active, over } = event;
+        if (!over || active.id === over.id) return;
+
+        setOrderedIds(prev => {
+            const current = prev ?? displayRecords.map(r => r.id);
+            const oldIdx = current.indexOf(String(active.id));
+            const newIdx = current.indexOf(String(over.id));
+            if (oldIdx === -1 || newIdx === -1) return prev;
+            const next = arrayMove(current, oldIdx, newIdx);
+            // Persist new order as seatNumbers
+            updateAttendeeOrder(next.map((id, i) => ({ id, seatNumber: i + 1 }))).catch(console.error);
+            return next;
+        });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [displayRecords]);
+
     // Track Caregiver State
     useEffect(() => {
         if (selectedScheduleDetails && (selectedScheduleDetails as any).caregiverIds) {
@@ -145,9 +265,10 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         }
     }, [selectedScheduleDetails]);
 
-    // Clear selection when schedule changes
+    // Clear selection and ordering when schedule changes
     useEffect(() => {
         setSelectedIds(new Set());
+        setOrderedIds(null);
     }, [scheduleFilter]);
 
     const logHistory = async (action: string, detail: string) => {
@@ -180,11 +301,19 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
 
     const handleUpdateInline = async (recordId: string, field: string, value: string | null, attendeeName: string) => {
         if (!firestore) return;
+        if (field === 'status' && value === 'docs_verified') {
+            const record = records.find(r => r.id === recordId);
+            if (!record?.attendeeId) {
+                toast({ variant: 'destructive', title: 'ต้องกรอกเลขบัตรประชาชนก่อน', description: 'กรุณาแก้ไขข้อมูลและกรอกเลขบัตรประชาชนก่อนเปลี่ยนสถานะ' });
+                return;
+            }
+            if (!validateThaiID(record.attendeeId)) {
+                toast({ variant: 'destructive', title: 'เลขบัตรประชาชนไม่ถูกต้อง', description: 'เลขบัตรประชาชนไม่ผ่านการตรวจสอบ Check Digit กรุณาตรวจสอบอีกครั้ง' });
+                return;
+            }
+        }
         startTransition(async () => {
             try {
-                const recordRef = doc(firestore, 'trainingRecords', recordId);
-                await updateDocumentNonBlocking(recordRef, { [field]: value });
-
                 let actionName = 'อัปเดตข้อมูล';
                 let valueLabel = String(value);
                 if (field === 'attendance') {
@@ -195,6 +324,15 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                     valueLabel = attendeeStatusConfig[value as AttendeeStatus]?.label || String(value);
                 } else if (field === 'preTestScore') actionName = 'อัปเดตคะแนน Pre-test';
                 else if (field === 'postTestScore') actionName = 'อัปเดตคะแนน Post-test';
+
+                if (field === 'status' && value === 'completed') {
+                    // Use server action for completion: generates certificate ID, expiry, search tokens, delivery package
+                    const result = await updateTrainingRecord(recordId, { status: 'completed' });
+                    if (!result.success) throw new Error(result.message);
+                } else {
+                    const recordRef = doc(firestore, 'trainingRecords', recordId);
+                    await updateDocumentNonBlocking(recordRef, { [field]: value });
+                }
 
                 await logHistory(actionName, `อัปเดต [${attendeeName}] เป็น "${valueLabel}"`);
                 toast({ title: 'บันทึกสำเร็จ', description: `${actionName} เรียบร้อยแล้ว` });
@@ -250,6 +388,22 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });
             }
         });
+    };
+
+    // Complete a docs_verified record and immediately show its certificate
+    const handleCompleteAndPrint = async (record: TrainingRecord) => {
+        setIsPrintingCertificate(record.id);
+        try {
+            const result = await updateTrainingRecord(record.id, { status: 'completed' });
+            if (!result.success) throw new Error(result.message);
+            const updatedRecord = result.record ?? { ...record, status: 'completed' as AttendeeStatus };
+            setRecordForCertificate(updatedRecord);
+            await logHistory('ตัดเกรดและพิมพ์ใบเซอร์', `ตัดเกรดผ่าน [${record.attendeeName}] และเปิดพรีวิวใบประกาศ`);
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'เกิดข้อผิดพลาด', description: e.message });
+        } finally {
+            setIsPrintingCertificate(null);
+        }
     };
 
     const toggleSelectAll = () => {
@@ -402,14 +556,61 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         </div>
     );
 
+    // ── Bulk Print Mode ────────────────────────────────────────────
+    if (isBulkPrintMode) {
+        return (
+            <div>
+                {/* Controls bar — hidden on print */}
+                <div className="print:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b shadow-md px-6 py-3 flex items-center justify-between gap-4">
+                    <Button variant="ghost" className="rounded-xl font-bold h-11 gap-2" onClick={() => setIsBulkPrintMode(false)}>
+                        <ArrowLeft className="w-4 h-4" /> กลับ
+                    </Button>
+                    <div className="flex items-center gap-3">
+                        <span className="text-sm font-bold text-slate-600">
+                            {recordsToPrint.length} ใบประกาศ
+                            {selectedIds.size > 0 && ` (จากที่เลือก ${selectedIds.size} คน)`}
+                        </span>
+                        <Button className="rounded-xl font-bold h-11 px-8 shadow-md shadow-primary/20" onClick={() => window.print()}>
+                            <Printer className="w-4 h-4 mr-2" /> พิมพ์ / PDF
+                        </Button>
+                    </div>
+                </div>
+
+                {/* Certificates — one per page on print */}
+                <div className="pt-20 print:pt-0 bg-gray-100 print:bg-white min-h-screen">
+                    {recordsToPrint.map((record, index) => {
+                        const certCourse = coursesMap.get(record.courseId);
+                        const certSchedule = schedulesMap.get(record.scheduleId);
+                        const certTemplate = certCourse?.certificateTemplateId ? templatesMap.get(certCourse.certificateTemplateId) : undefined;
+                        if (!certCourse || !certSchedule) return null;
+                        return (
+                            <div key={record.id} className={cn('p-6 print:p-0', index < recordsToPrint.length - 1 && 'break-after-page')}>
+                                <div className="max-w-4xl mx-auto print:max-w-none">
+                                    <CertificateTemplate record={record} course={certCourse} schedule={certSchedule} template={certTemplate} />
+                                </div>
+                                {/* Cert ID label — print only */}
+                                <p className="hidden print:block text-[9px] text-center text-gray-400 mt-1 font-mono">{record.certificateId}</p>
+                            </div>
+                        );
+                    })}
+                    {recordsToPrint.length === 0 && (
+                        <div className="flex flex-col items-center justify-center h-64 opacity-40 print:hidden">
+                            <Award className="w-16 h-16 mb-4 text-slate-400" />
+                            <p className="font-bold text-slate-600">ไม่มีใบประกาศที่พร้อมพิมพ์</p>
+                            <p className="text-sm mt-1 text-slate-500">ต้องมีผู้อบรมที่สถานะ "ผ่านการอบรม" ในรอบนี้</p>
+                        </div>
+                    )}
+                </div>
+                <style dangerouslySetInnerHTML={{ __html: `@media print { @page { size: A4 landscape; margin: 0; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }` }} />
+            </div>
+        );
+    }
+    // ────────────────────────────────────────────────────────────────
+
     return (
         <div className="space-y-6 pb-20">
             {/* Top Bar */}
             <div className="flex flex-col gap-4 text-left">
-                <div>
-                    <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">จัดการข้อมูลผู้อบรมประจำวัน</h1>
-                    <p className="text-muted-foreground mt-1 font-light">ระบบเช็คชื่อ เช็คข้อมูล และตัดเกรดการอบรม</p>
-                </div>
                 <Card className="border-none shadow-sm rounded-3xl bg-white dark:bg-slate-900/40 p-6">
                     <CourseFilters
                         courses={courses} categories={categories} schedules={schedules}
@@ -460,30 +661,43 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                 ) : (
                                                     <span className="font-semibold text-sm text-slate-700 dark:text-slate-200">ยังไม่ได้ระบุทีมดูแล</span>
                                                 )}
-                                                <Button variant="ghost" size="icon" className="w-6 h-6 rounded-full hover:bg-slate-100" onClick={() => setEditingCaregiver(true)}>
-                                                    <Edit3 className="w-3 h-3 text-slate-400" />
-                                                </Button>
+                                                {canEdit && (
+                                                    <Button variant="ghost" size="icon" className="w-6 h-6 rounded-full hover:bg-slate-100" onClick={() => setEditingCaregiver(true)}>
+                                                        <Edit3 className="w-3 h-3 text-slate-400" />
+                                                    </Button>
+                                                )}
                                             </div>
                                         )}
                                     </div>
                                 </div>
                             </div>
                             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+                                {scheduleFilter !== 'all' && (
+                                    <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={() => setIsBulkPrintMode(true)} disabled={recordsToPrint.length === 0}>
+                                        <Printer className="w-4 h-4 mr-2" />
+                                        พิมพ์ใบประกาศ
+                                        {recordsToPrint.length > 0 && <span className="ml-1.5 bg-amber-100 text-amber-700 rounded-full px-2 py-0.5 text-xs font-black">{recordsToPrint.length}</span>}
+                                    </Button>
+                                )}
                                 <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-slate-200" onClick={() => setShowHistoryDialog(true)}>
                                     <History className="w-4 h-4 mr-2" /> ประวัติ
                                 </Button>
                                 <Button className="rounded-xl font-bold shadow-sm bg-emerald-600 hover:bg-emerald-700 text-white h-11" onClick={exportToCSV}>
                                     <Download className="w-4 h-4 mr-2" /> Export CSV
                                 </Button>
-                                <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-slate-200" onClick={() => setIsCsvModalOpen(true)}>
-                                    <Upload className="w-4 h-4 mr-2" /> Import CSV
-                                </Button>
-                                <Button
-                                    className="rounded-xl font-bold shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white h-11"
-                                    onClick={() => setIsWalkinModalOpen(true)}
-                                >
-                                    <UserPlus className="w-4 h-4 mr-2" /> เพิ่ม Walk-in
-                                </Button>
+                                {canEdit && (
+                                    <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-slate-200" onClick={() => setIsCsvModalOpen(true)}>
+                                        <Upload className="w-4 h-4 mr-2" /> Import CSV
+                                    </Button>
+                                )}
+                                {canEdit && (
+                                    <Button
+                                        className="rounded-xl font-bold shadow-sm bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700 text-white h-11"
+                                        onClick={() => setIsWalkinModalOpen(true)}
+                                    >
+                                        <UserPlus className="w-4 h-4 mr-2" /> เพิ่ม Walk-in
+                                    </Button>
+                                )}
                             </div>
                         </CardHeader>
 
@@ -506,17 +720,23 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                         <CheckCircle2 className="w-4 h-4" />เลือกแล้ว {selectedIds.size} คน
                                     </span>
                                     <div className="flex items-center gap-2 flex-wrap ml-2">
-                                        <Button size="sm" className="h-8 rounded-lg font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm" onClick={() => handleBulkAttendance('present')} disabled={isBulkPending}>
-                                            {isBulkPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <UserRound className="w-3 h-3 mr-1" />}
-                                            มาทั้งหมด
-                                        </Button>
-                                        <Button size="sm" className="h-8 rounded-lg font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-sm" onClick={() => handleBulkAttendance('absent')} disabled={isBulkPending}>
-                                            {isBulkPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <UserRoundX className="w-3 h-3 mr-1" />}
-                                            ขาดทั้งหมด
-                                        </Button>
-                                        <Button size="sm" className="h-8 rounded-lg font-bold bg-green-500 hover:bg-green-600 text-white shadow-sm" onClick={() => handleBulkStatus('completed')} disabled={isBulkPending}>
-                                            <ShieldCheck className="w-3 h-3 mr-1" /> ผ่านอบรม
-                                        </Button>
+                                        {canManageAttendance && (
+                                            <Button size="sm" className="h-8 rounded-lg font-bold bg-emerald-500 hover:bg-emerald-600 text-white shadow-sm" onClick={() => handleBulkAttendance('present')} disabled={isBulkPending}>
+                                                {isBulkPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <UserRound className="w-3 h-3 mr-1" />}
+                                                มาทั้งหมด
+                                            </Button>
+                                        )}
+                                        {canManageAttendance && (
+                                            <Button size="sm" className="h-8 rounded-lg font-bold bg-rose-500 hover:bg-rose-600 text-white shadow-sm" onClick={() => handleBulkAttendance('absent')} disabled={isBulkPending}>
+                                                {isBulkPending ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <UserRoundX className="w-3 h-3 mr-1" />}
+                                                ขาดทั้งหมด
+                                            </Button>
+                                        )}
+                                        {canComplete && (
+                                            <Button size="sm" className="h-8 rounded-lg font-bold bg-green-500 hover:bg-green-600 text-white shadow-sm" onClick={() => handleBulkStatus('completed')} disabled={isBulkPending}>
+                                                <ShieldCheck className="w-3 h-3 mr-1" /> ผ่านอบรม
+                                            </Button>
+                                        )}
                                         <Button size="sm" variant="outline" className="h-8 rounded-lg font-bold text-slate-500" onClick={() => setSelectedIds(new Set())}>
                                             ยกเลิกการเลือก
                                         </Button>
@@ -526,10 +746,12 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
 
                             {/* Data Grid */}
                             <div className="overflow-x-auto custom-scrollbar">
-                                <Table className="min-w-[1200px]">
+                                <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                                <Table className="min-w-[1260px]">
                                     <TableHeader className="bg-white dark:bg-slate-900 border-y">
                                         <TableRow className="hover:bg-transparent shadow-sm">
-                                            <TableHead className="py-5 pl-6 w-[50px]">
+                                            <TableHead className="py-5 pl-3 w-[72px] uppercase tracking-widest text-[11px] text-slate-400 font-bold">ลำดับ</TableHead>
+                                            <TableHead className="py-5 pl-2 w-[44px]">
                                                 <Checkbox
                                                     checked={filteredRecords.length > 0 && selectedIds.size === filteredRecords.length}
                                                     onCheckedChange={toggleSelectAll}
@@ -543,18 +765,18 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                             <TableHead className="text-right pr-8 uppercase tracking-widest text-[11px] text-slate-400 font-bold">เพิ่มเติม</TableHead>
                                         </TableRow>
                                     </TableHeader>
+                                    <SortableContext items={displayRecords.map(r => r.id)} strategy={verticalListSortingStrategy}>
                                     <TableBody>
                                         {isLoading ? (
-                                            <TableRow><TableCell colSpan={6} className="h-64 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-50" /></TableCell></TableRow>
-                                        ) : filteredRecords.length > 0 ? filteredRecords.map((record) => (
-                                            <TableRow
+                                            <TableRow><TableCell colSpan={7} className="h-64 text-center"><Loader2 className="h-8 w-8 animate-spin mx-auto text-primary opacity-50" /></TableCell></TableRow>
+                                        ) : displayRecords.length > 0 ? displayRecords.map((record, index) => (
+                                            <SortableRowWrapper
                                                 key={record.id}
-                                                className={cn(
-                                                    "hover:bg-white dark:hover:bg-slate-900 transition-colors group",
-                                                    selectedIds.has(record.id) ? "bg-indigo-50/60 dark:bg-indigo-950/30" : ""
-                                                )}
+                                                id={record.id}
+                                                index={index}
+                                                isSelected={selectedIds.has(record.id)}
                                             >
-                                                <TableCell className="pl-6">
+                                                <TableCell className="pl-2 w-[44px]">
                                                     <Checkbox
                                                         checked={selectedIds.has(record.id)}
                                                         onCheckedChange={() => toggleSelect(record.id)}
@@ -588,7 +810,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                                 <button
                                                                     key={status}
                                                                     onClick={() => handleUpdateInline(record.id, 'attendance', status, record.attendeeName)}
-                                                                    disabled={isPending}
+                                                                    disabled={isPending || !canManageAttendance}
                                                                     className={cn(
                                                                         "px-3 py-1.5 rounded-lg text-xs font-bold transition-all disabled:opacity-50",
                                                                         isSelected
@@ -603,16 +825,35 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-left">
-                                                    <Select value={record.status} onValueChange={(v) => handleUpdateInline(record.id, 'status', v, record.attendeeName)} disabled={isPending}>
+                                                    <div className="flex items-center gap-1.5">
+                                                    {!record.attendeeId && record.status === 'pending_verification' && (
+                                                        <span title="ยังไม่มีเลขบัตรประชาชน"><AlertCircle className="w-4 h-4 text-amber-500 shrink-0" /></span>
+                                                    )}
+                                                    <Select
+                                                        value={record.status}
+                                                        onValueChange={(v) => {
+                                                            if (isInspectionTeam && v !== 'docs_verified') return;
+                                                            handleUpdateInline(record.id, 'status', v, record.attendeeName);
+                                                        }}
+                                                        disabled={isPending}
+                                                    >
                                                         <SelectTrigger className={cn("h-10 rounded-xl font-bold border-none shadow-sm", attendeeStatusConfig[record.status]?.badgeClass)}>
                                                             <SelectValue />
                                                         </SelectTrigger>
                                                         <SelectContent className="rounded-2xl">
-                                                            {Object.entries(attendeeStatusConfig).map(([key, config]) => (
-                                                                <SelectItem key={key} value={key} className="font-semibold">{config.label}</SelectItem>
-                                                            ))}
+                                                            {Object.entries(attendeeStatusConfig)
+                                                                .filter(([key]) => {
+                                                                    if (isInspectionTeam) return key === 'pending_verification' || key === 'docs_verified';
+                                                                    if (!canComplete) return key !== 'completed' && key !== 'failed';
+                                                                    if (!canVerifyDocs) return key !== 'docs_verified';
+                                                                    return true;
+                                                                })
+                                                                .map(([key, config]) => (
+                                                                    <SelectItem key={key} value={key} className="font-semibold">{config.label}</SelectItem>
+                                                                ))}
                                                         </SelectContent>
                                                     </Select>
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     <div className="flex items-center justify-center gap-2">
@@ -647,19 +888,27 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                             {isReadingCard === record.id ? 'กำลังอ่าน...' : 'อ่านบัตร'}
                                                         </Button>
                                                         {record.status === 'completed' && (
-                                                            <Button variant="outline" size="sm" className="h-8 rounded-lg font-bold text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 shadow-sm" onClick={() => toast({ title: 'พิมพ์ใบเซอร์', description: 'ส่งคำสั่งสร้าง PDF E-Certificate เรียบร้อยแล้ว' })}>
-                                                                <Printer className="w-3.5 h-3.5 mr-1" /> ใบเซอร์
+                                                            <Button variant="outline" size="sm" className="h-8 rounded-lg font-bold text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100 px-2 shadow-sm" onClick={() => setRecordForCertificate(record)} disabled={!record.certificateId}>
+                                                                <Award className="w-3.5 h-3.5 mr-1" /> ใบเซอร์
                                                             </Button>
                                                         )}
-                                                        <Button variant="secondary" size="sm" className="h-8 rounded-lg font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 px-2" onClick={() => { setEditingRecord(record); setIsEditModalOpen(true); }}>
-                                                            <Edit3 className="w-3.5 h-3.5 mr-1" /> แก้ไข
-                                                        </Button>
+                                                        {record.status === 'docs_verified' && canComplete && (
+                                                            <Button variant="outline" size="sm" className="h-8 rounded-lg font-bold text-emerald-600 border-emerald-200 bg-emerald-50 hover:bg-emerald-100 px-2 shadow-sm" onClick={() => handleCompleteAndPrint(record)} disabled={isPrintingCertificate === record.id}>
+                                                                {isPrintingCertificate === record.id ? <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" /> : <Printer className="w-3.5 h-3.5 mr-1" />}
+                                                                {isPrintingCertificate === record.id ? 'กำลังสร้าง...' : 'ตัดเกรด+พิมพ์'}
+                                                            </Button>
+                                                        )}
+                                                        {canEdit && (
+                                                            <Button variant="secondary" size="sm" className="h-8 rounded-lg font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100 px-2" onClick={() => { setEditingRecord(record); setIsEditModalOpen(true); }}>
+                                                                <Edit3 className="w-3.5 h-3.5 mr-1" /> แก้ไข
+                                                            </Button>
+                                                        )}
                                                     </div>
                                                 </TableCell>
-                                            </TableRow>
+                                            </SortableRowWrapper>
                                         )) : (
                                             <TableRow>
-                                                <TableCell colSpan={6} className="h-64 text-center">
+                                                <TableCell colSpan={7} className="h-64 text-center">
                                                     <div className="flex flex-col items-center justify-center opacity-40">
                                                         <Users className="w-12 h-12 mb-4 text-slate-400" />
                                                         <p className="font-bold">ไม่พบข้อมูลผู้อบรม</p>
@@ -669,7 +918,9 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                             </TableRow>
                                         )}
                                     </TableBody>
+                                    </SortableContext>
                                 </Table>
+                                </DndContext>
                             </div>
                         </CardContent>
                     </Card>
@@ -802,6 +1053,49 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Certificate Preview Dialog */}
+            {(() => {
+                if (!recordForCertificate) return null;
+                const certCourse = coursesMap.get(recordForCertificate.courseId);
+                const certSchedule = schedulesMap.get(recordForCertificate.scheduleId);
+                const certTemplate = certCourse?.certificateTemplateId ? templatesMap.get(certCourse.certificateTemplateId) : undefined;
+                if (!certCourse || !certSchedule) return null;
+                return (
+                    <Dialog open={!!recordForCertificate} onOpenChange={(v) => !v && setRecordForCertificate(null)}>
+                        <DialogContent className="max-w-5xl rounded-[2rem] p-0 overflow-hidden shadow-2xl border-none z-[200]">
+                            <DialogHeader className="p-6 pb-4 text-left border-b bg-white dark:bg-slate-950 print:hidden">
+                                <DialogTitle className="text-xl font-bold font-headline flex items-center gap-2">
+                                    <Award className="w-5 h-5 text-amber-500" /> พรีวิวใบประกาศนียบัตร
+                                </DialogTitle>
+                                <DialogDescription>{recordForCertificate.attendeeName} — {certCourse.title}</DialogDescription>
+                            </DialogHeader>
+                            <div className="p-8 bg-slate-100/60 flex justify-center print:p-0 print:bg-white">
+                                <div className="max-w-4xl w-full">
+                                    <CertificateTemplate record={recordForCertificate} course={certCourse} schedule={certSchedule} template={certTemplate} />
+                                </div>
+                            </div>
+                            <DialogFooter className="p-5 border-t bg-white dark:bg-slate-950 print:hidden flex gap-2 justify-between sm:justify-between">
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+                                    <span className="font-semibold text-slate-500">เลขที่:</span>
+                                    <span>{recordForCertificate.certificateId || '—'}</span>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button variant="ghost" onClick={() => setRecordForCertificate(null)} className="rounded-xl font-bold h-11 px-5">ปิด</Button>
+                                    <Button asChild variant="outline" className="rounded-xl font-bold h-11 px-5 border-blue-200 text-blue-700 hover:bg-blue-50">
+                                        <Link href={`/erp/certificate/${recordForCertificate.id}`} target="_blank">
+                                            <ExternalLink className="w-4 h-4 mr-2" /> เปิดหน้าพิมพ์
+                                        </Link>
+                                    </Button>
+                                    <Button onClick={() => window.print()} className="rounded-xl font-bold h-11 px-6 shadow-md shadow-primary/20">
+                                        <Printer className="w-4 h-4 mr-2" /> พิมพ์ / PDF
+                                    </Button>
+                                </div>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                );
+            })()}
         </div>
     );
 }

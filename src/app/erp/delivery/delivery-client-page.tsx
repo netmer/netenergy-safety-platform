@@ -168,9 +168,10 @@ function DeliveryDetailDialog({ pkg, open, onClose, onUpdated, actorName }: Deli
 interface DeliveryClientPageProps {
     courses: Course[];
     schedules: TrainingSchedule[];
+    initialScheduleId?: string | null;
 }
 
-export function DeliveryClientPage({ courses, schedules }: DeliveryClientPageProps) {
+export function DeliveryClientPage({ courses, schedules, initialScheduleId }: DeliveryClientPageProps) {
     const { profile } = useAuth();
     const actorName = profile?.displayName || profile?.nickname || 'ระบบ';
     const firestore = useFirestore();
@@ -188,8 +189,11 @@ export function DeliveryClientPage({ courses, schedules }: DeliveryClientPagePro
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<DeliveryItemStatus | 'all'>('all');
     const [courseFilter, setCourseFilter] = useState('all');
+    const [scheduleFilter, setScheduleFilter] = useState<string>(initialScheduleId ?? 'all');
     const [selectedPkg, setSelectedPkg] = useState<DeliveryPackage | null>(null);
-    const [expandedSchedules, setExpandedSchedules] = useState<Set<string>>(new Set());
+    const [expandedSchedules, setExpandedSchedules] = useState<Set<string>>(
+        initialScheduleId ? new Set([initialScheduleId]) : new Set()
+    );
     const [batchingSchedule, setBatchingSchedule] = useState<string | null>(null);
     const [isPending, startTransition] = useTransition();
     const { toast } = useToast();
@@ -203,8 +207,9 @@ export function DeliveryClientPage({ courses, schedules }: DeliveryClientPagePro
         if (searchQuery && !p.clientCompanyName?.toLowerCase().includes(searchQuery.toLowerCase()) && !p.trackingNumber?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
         if (statusFilter !== 'all' && p.overallStatus !== statusFilter) return false;
         if (courseFilter !== 'all' && p.courseId !== courseFilter) return false;
+        if (scheduleFilter !== 'all' && p.scheduleId !== scheduleFilter) return false;
         return true;
-    }), [packages, searchQuery, statusFilter, courseFilter]);
+    }), [packages, searchQuery, statusFilter, courseFilter, scheduleFilter]);
 
     // Group by schedule for Tab 2
     const groupedBySchedule = useMemo(() => {
@@ -253,13 +258,8 @@ export function DeliveryClientPage({ courses, schedules }: DeliveryClientPagePro
     };
 
     return (
-        <div className="space-y-8 pb-20">
-            <div>
-                <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">การจัดส่งเอกสารและของรางวัล</h1>
-                <p className="text-muted-foreground mt-1 font-light">ติดตามสถานะการจัดส่งรายการหลังการอบรม</p>
-            </div>
-
-            <Tabs defaultValue="list">
+        <div className="space-y-6 pb-20">
+            <Tabs defaultValue={initialScheduleId ? 'by-schedule' : 'list'}>
                 <TabsList className="rounded-xl">
                     <TabsTrigger value="list" className="rounded-lg">รายการจัดส่ง</TabsTrigger>
                     <TabsTrigger value="by-schedule" className="rounded-lg">จัดกลุ่มตามรอบ</TabsTrigger>
@@ -269,8 +269,8 @@ export function DeliveryClientPage({ courses, schedules }: DeliveryClientPagePro
                 <TabsContent value="list" className="mt-6">
                     <Card className="border-none shadow-sm rounded-3xl">
                         <CardHeader>
-                            <div className="flex flex-col md:flex-row gap-3">
-                                <div className="relative flex-1">
+                            <div className="flex flex-col md:flex-row gap-3 flex-wrap">
+                                <div className="relative flex-1 min-w-[200px]">
                                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                     <Input
                                         placeholder="ค้นหาบริษัท / เลขพัสดุ..."
@@ -279,6 +279,17 @@ export function DeliveryClientPage({ courses, schedules }: DeliveryClientPagePro
                                         className="pl-9 rounded-xl"
                                     />
                                 </div>
+                                <Select value={scheduleFilter} onValueChange={setScheduleFilter}>
+                                    <SelectTrigger className="w-56 rounded-xl"><SelectValue placeholder="กรองรอบอบรม" /></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">ทุกรอบอบรม</SelectItem>
+                                        {schedules.map(s => (
+                                            <SelectItem key={s.id} value={s.id}>
+                                                {s.courseTitle} ({s.startDate})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                                 <Select value={statusFilter} onValueChange={v => setStatusFilter(v as DeliveryItemStatus | 'all')}>
                                     <SelectTrigger className="w-44 rounded-xl"><SelectValue placeholder="กรองสถานะ" /></SelectTrigger>
                                     <SelectContent>
@@ -287,7 +298,7 @@ export function DeliveryClientPage({ courses, schedules }: DeliveryClientPagePro
                                     </SelectContent>
                                 </Select>
                                 <Select value={courseFilter} onValueChange={setCourseFilter}>
-                                    <SelectTrigger className="w-52 rounded-xl"><SelectValue placeholder="กรองหลักสูตร" /></SelectTrigger>
+                                    <SelectTrigger className="w-48 rounded-xl"><SelectValue placeholder="กรองหลักสูตร" /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="all">ทุกหลักสูตร</SelectItem>
                                         {courses.map(c => <SelectItem key={c.id} value={c.id}>{c.shortName || c.title}</SelectItem>)}

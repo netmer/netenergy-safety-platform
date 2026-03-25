@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { sendEmail, emailTemplates } from '@/lib/mail';
 import { writeAuditLog } from '@/lib/audit';
 import { generateQuotationAction, generateInvoiceAction } from '@/app/erp/billing/actions';
+import { createSystemNotification } from '@/lib/notifications';
 
 const PAGE_SIZE = 30;
 
@@ -341,6 +342,17 @@ export async function updateRegistrationStatus(id: string, status: RegistrationS
             html: template.html,
         });
 
+        // Notify training_team when registration is confirmed so they can prepare
+        if (status === 'confirmed') {
+            createSystemNotification({
+                title: 'มีการลงทะเบียนได้รับการยืนยัน',
+                message: `${regData.clientCompanyName || regData.userDisplayName} ยืนยันลงทะเบียน ${regData.courseTitle} แล้ว`,
+                type: 'info',
+                link: '/erp/attendees',
+                forRole: 'training_team',
+            }).catch(() => {}); // fire-and-forget, non-fatal
+        }
+
         revalidatePath('/erp/registrations');
         revalidatePath('/erp/attendees');
         revalidatePath('/profile');
@@ -519,6 +531,18 @@ export async function updateIndividualAttendeeStatus({
     }
 
     await batch.commit();
+
+    // Notify inspection_team when new training records (pending_verification) are created
+    if (newStatus === 'confirmed') {
+        createSystemNotification({
+            title: 'มีผู้อบรมพร้อมตรวจสอบเอกสาร',
+            message: `${registrationData.courseTitle} — มีผู้อบรมใหม่ ${attendeeIds.length} ท่าน รอตรวจสอบเอกสาร`,
+            type: 'info',
+            link: '/erp/attendees',
+            forRole: 'inspection_team',
+        }).catch(() => {});
+    }
+
     revalidatePath(`/erp/registrations`);
     return { success: true, message: `อัปเดตสถานะผู้อบรมเรียบร้อยแล้ว`, updatedAttendees };
   } catch (e) {

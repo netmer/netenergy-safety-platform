@@ -32,11 +32,12 @@ async function getCertificatePageData() {
 }
 
 
-export default async function CertificatePage() {
+export default async function CertificatePage({ searchParams }: { searchParams: Promise<{ scheduleId?: string }> }) {
+    const { scheduleId } = await searchParams;
     const data = await getCertificatePageData();
     return (
         <div className="space-y-8">
-            <CertificateClientPage {...data} />
+            <CertificateClientPage {...data} initialScheduleId={scheduleId ?? null} />
         </div>
     );
 }

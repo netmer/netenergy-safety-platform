@@ -1,7 +1,7 @@
 'use server';
 
 import { db, storage } from '@/lib/firebase';
-import { doc, getDoc, updateDoc, writeBatch, setDoc, collection, query, where, getDocs, addDoc, deleteDoc, orderBy, startAfter, limit, DocumentData, documentId } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, writeBatch, setDoc, collection, query, where, getDocs, addDoc, deleteDoc, orderBy, startAfter, limit, DocumentData, documentId, runTransaction } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
 import type { Registration, AttendeeStatus, RegistrationFormField, AttendeeAttendanceStatus, AdditionalDoc, AttendeeData, TrainingRecord, Course } from '@/lib/course-data';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
@@ -9,8 +9,27 @@ import {nanoid} from 'nanoid';
 import { format, addYears } from 'date-fns';
 import { generateSearchTokens } from '@/lib/search-utils';
 import { z } from 'zod';
+import { createSystemNotification } from '@/lib/notifications';
 
 const PAGE_SIZE = 30;
+
+/**
+ * Atomically increments the per-course certificate counter and returns a new
+ * certificate ID in the format YYMMDD-XXXX (Buddhist year, 4-digit sequence).
+ */
+async function generateCertificateId(courseId: string, now: Date): Promise<string> {
+    const counterRef = doc(db, 'courseCounters', courseId);
+    let counter = 1;
+    await runTransaction(db, async (transaction) => {
+        const snap = await transaction.get(counterRef);
+        counter = (snap.data()?.count ?? 0) + 1;
+        transaction.set(counterRef, { count: counter }, { merge: true });
+    });
+    const yy = ((now.getFullYear() + 543) % 100).toString().padStart(2, '0');
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd = now.getDate().toString().padStart(2, '0');
+    return `${yy}${mm}${dd}-${counter.toString().padStart(4, '0')}`;
+}
 
 export async function getPaginatedTrainingRecords({
     scheduleId,
@@ -53,7 +72,7 @@ export async function getPaginatedTrainingRecords({
     const records = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainingRecord));
 
     // After fetching records, get their associated attendee profiles
-    const attendeeIds = [...new Set(records.map(r => r.attendeeId).filter(Boolean as (s: string | null) => s is string))];
+    const attendeeIds = [...new Set(records.map(r => r.attendeeId).filter((id): id is string => !!id))];
     const attendeeProfiles: AttendeeData[] = [];
 
     if (attendeeIds.length > 0) {
@@ -93,8 +112,26 @@ export async function findAttendeeByNationalId(attendeeId: string) {
 }
 
 
+function validateThaiID(id: string): boolean {
+    if (!/^[0-9]{13}$/.test(id)) return false;
+    let sum = 0;
+    for (let i = 0; i < 12; i++) sum += parseInt(id.charAt(i)) * (13 - i);
+    return ((11 - (sum % 11)) % 10) === parseInt(id.charAt(12));
+}
+
 export async function updateTrainingRecord(recordId: string, updates: Partial<TrainingRecord>) {
     const recordRef = doc(db, 'trainingRecords', recordId);
+
+    // Guard: require valid National ID before docs_verified
+    if (updates.status === 'docs_verified') {
+        const snap = await getDoc(recordRef);
+        if (snap.exists()) {
+            const data = snap.data() as TrainingRecord;
+            if (!data.attendeeId || !validateThaiID(data.attendeeId)) {
+                return { success: false, message: 'ต้องกรอกเลขบัตรประชาชนที่ถูกต้องก่อนเปลี่ยนสถานะ' };
+            }
+        }
+    }
 
     // If marking as completed, generate certificate ID, date, expiry date, and search tokens
     if (updates.status === 'completed') {
@@ -104,10 +141,7 @@ export async function updateTrainingRecord(recordId: string, updates: Partial<Tr
             // Only generate certificate info if it doesn't exist to prevent overwriting
             if (!recordData.certificateId) {
                 const now = new Date();
-                const year = now.getFullYear() + 543; // Buddhist year
-                const month = (now.getMonth() + 1).toString().padStart(2, '0');
-                const randomPart = nanoid(6).toUpperCase();
-                updates.certificateId = `${year}${month}-${randomPart}`;
+                updates.certificateId = await generateCertificateId(recordData.courseId, now);
                 updates.certificateIssueDate = now.toISOString();
                 updates.completionDate = now.toISOString();
 
@@ -134,10 +168,57 @@ export async function updateTrainingRecord(recordId: string, updates: Partial<Tr
     }
 
     await updateDoc(recordRef, updates);
+
+    let completedRecord: TrainingRecord | undefined;
+    if (updates.status === 'completed') {
+        const recordSnap2 = await getDoc(recordRef);
+        if (recordSnap2.exists()) {
+            completedRecord = { id: recordId, ...recordSnap2.data() } as TrainingRecord;
+            await autoCreateDeliveryIfNeeded(completedRecord.registrationId, completedRecord.attendeeName || 'ระบบ');
+            createSystemNotification({
+                title: 'ผ่านการอบรม — ตรวจสอบการจัดส่ง',
+                message: `${completedRecord.attendeeName} ผ่านอบรม ${completedRecord.courseTitle} เรียบร้อยแล้ว`,
+                type: 'success',
+                link: '/erp/delivery',
+                forRole: 'course_specialist',
+            }).catch(() => {});
+        }
+    } else if (updates.status === 'docs_verified') {
+        const recordSnap3 = await getDoc(recordRef);
+        if (recordSnap3.exists()) {
+            const verifiedData = recordSnap3.data() as TrainingRecord;
+            createSystemNotification({
+                title: 'เอกสารผ่านการตรวจสอบ',
+                message: `${verifiedData.attendeeName} เอกสารครบถ้วนแล้ว พร้อมตัดเกรด`,
+                type: 'info',
+                link: '/erp/attendees',
+                forRole: 'training_team',
+            }).catch(() => {});
+        }
+    }
+
     revalidatePath('/erp/attendees');
     revalidatePath('/erp/history');
     revalidatePath('/erp/certificate');
-    return { success: true, message: 'อัปเดตข้อมูลการอบรมสำเร็จ' };
+    return { success: true, message: 'อัปเดตข้อมูลการอบรมสำเร็จ', record: completedRecord };
+}
+
+async function autoCreateDeliveryIfNeeded(registrationId: string, createdBy: string) {
+    if (!registrationId || registrationId.startsWith('walk-in-') || registrationId.startsWith('bulk-import-')) return;
+    try {
+        const regSnap = await getDoc(doc(db, 'registrations', registrationId));
+        if (!regSnap.exists()) return;
+        const reg = regSnap.data() as Registration;
+        if (reg.deliveryPackageId) return; // already exists
+        const courseSnap = await getDoc(doc(db, 'courses', reg.courseId));
+        if (!courseSnap.exists()) return;
+        const course = courseSnap.data() as Course;
+        if (!(course.deliverables ?? []).some((d: any) => d.enabled)) return; // no deliverables configured
+        const { createDeliveryPackage } = await import('@/app/erp/delivery/actions');
+        await createDeliveryPackage(registrationId, createdBy);
+    } catch (e) {
+        console.error('autoCreateDelivery failed for', registrationId, e);
+    }
 }
 
 export async function updateTrainingRecordDetails(recordId: string, updates: { seatNumber?: string; room?: string }) {
@@ -279,7 +360,7 @@ export async function updateSingleAttendeeData(formData: FormData) {
         
         const recordToUpdate = { ...recordSnap.data() } as TrainingRecord;
         
-        ['attendeeName', 'companyName'].forEach(field => {
+        (['attendeeName', 'companyName'] as const).forEach(field => {
             if (formData.has(field)) {
                 recordToUpdate[field] = formData.get(field) as string;
             }
@@ -402,78 +483,121 @@ export async function bulkCompleteTrainingRecords(recordIds: string[]): Promise<
         return { success: false, message: 'ไม่มีรายการที่เลือก', completed: 0, skipped: 0 };
     }
 
-    const CHUNK_SIZE = 30; // Read in smaller batches first
+    const CHUNK_SIZE = 30;
     const WRITE_CHUNK = 400;
     const now = new Date();
-    const yearBE = now.getFullYear() + 543;
-    const month = (now.getMonth() + 1).toString().padStart(2, '0');
+    const yy = ((now.getFullYear() + 543) % 100).toString().padStart(2, '0');
+    const mm = (now.getMonth() + 1).toString().padStart(2, '0');
+    const dd = now.getDate().toString().padStart(2, '0');
     const completionYearCE = now.getFullYear();
 
     // Cache course validity to avoid redundant reads
     const courseCache = new Map<string, number | null>();
 
-    const recordUpdates: { id: string; updates: Partial<TrainingRecord> }[] = [];
+    // Step 1: Read all records and separate new completions from already-completed
+    type RecordEntry = { id: string; data: TrainingRecord };
+    const newCompletions: RecordEntry[] = [];
+    const alreadyCompleted: string[] = [];
+    const completedRegistrationIds: string[] = [];
 
     for (let i = 0; i < recordIds.length; i += CHUNK_SIZE) {
         const chunk = recordIds.slice(i, i + CHUNK_SIZE);
         const snaps = await Promise.all(chunk.map(id => getDoc(doc(db, 'trainingRecords', id))));
-
         for (const snap of snaps) {
             if (!snap.exists()) continue;
             const data = snap.data() as TrainingRecord;
-
-            // Skip already completed records
             if (data.status === 'completed' && data.certificateId) {
-                recordUpdates.push({ id: snap.id, updates: {} }); // mark as skipped (empty updates)
-                continue;
+                alreadyCompleted.push(snap.id);
+            } else {
+                newCompletions.push({ id: snap.id, data });
+                completedRegistrationIds.push(data.registrationId);
             }
+        }
+    }
 
-            // Get course validity
-            if (!courseCache.has(data.courseId)) {
-                const courseSnap = await getDoc(doc(db, 'courses', data.courseId));
-                if (courseSnap.exists()) {
-                    const c = courseSnap.data() as Course;
-                    courseCache.set(data.courseId, c.validityYears && c.validityYears > 0 ? c.validityYears : null);
-                } else {
-                    courseCache.set(data.courseId, null);
-                }
+    // Step 2: Pre-fetch course validity
+    for (const { data } of newCompletions) {
+        if (!courseCache.has(data.courseId)) {
+            const courseSnap = await getDoc(doc(db, 'courses', data.courseId));
+            if (courseSnap.exists()) {
+                const c = courseSnap.data() as Course;
+                courseCache.set(data.courseId, c.validityYears && c.validityYears > 0 ? c.validityYears : null);
+            } else {
+                courseCache.set(data.courseId, null);
             }
-            const validityYears = courseCache.get(data.courseId) ?? null;
-            const expiryDate = validityYears ? addYears(now, validityYears).toISOString() : null;
+        }
+    }
 
-            const randomPart = nanoid(6).toUpperCase();
-            const updates: Partial<TrainingRecord> = {
+    // Step 3: Pre-allocate counter ranges per course atomically
+    // Count how many new certificates each course needs
+    const courseNewCount = new Map<string, number>();
+    for (const { data } of newCompletions) {
+        if (!data.certificateId) { // only if cert doesn't already exist
+            courseNewCount.set(data.courseId, (courseNewCount.get(data.courseId) ?? 0) + 1);
+        }
+    }
+    // For each course, atomically reserve a block of consecutive counter values
+    const courseStartCounter = new Map<string, number>(); // courseId -> first counter in block
+    for (const [courseId, count] of courseNewCount) {
+        await runTransaction(db, async (transaction) => {
+            const counterRef = doc(db, 'courseCounters', courseId);
+            const snap = await transaction.get(counterRef);
+            const current = snap.data()?.count ?? 0;
+            courseStartCounter.set(courseId, current + 1);
+            transaction.set(counterRef, { count: current + count }, { merge: true });
+        });
+    }
+
+    // Step 4: Build updates, assigning sequential IDs within each course
+    const courseCurrentCounter = new Map(courseStartCounter);
+    const recordUpdates: { id: string; updates: Partial<TrainingRecord> }[] = [];
+
+    for (const { id, data } of newCompletions) {
+        const validityYears = courseCache.get(data.courseId) ?? null;
+        const expiryDate = validityYears ? addYears(now, validityYears).toISOString() : null;
+
+        let certId = data.certificateId;
+        if (!certId) {
+            const counter = courseCurrentCounter.get(data.courseId)!;
+            courseCurrentCounter.set(data.courseId, counter + 1);
+            certId = `${yy}${mm}${dd}-${counter.toString().padStart(4, '0')}`;
+        }
+
+        recordUpdates.push({
+            id,
+            updates: {
                 status: 'completed',
-                certificateId: data.certificateId || `${yearBE}${month}-${randomPart}`,
+                certificateId: certId,
                 certificateIssueDate: data.certificateIssueDate || now.toISOString(),
                 completionDate: data.completionDate || now.toISOString(),
                 expiryDate,
                 passedTraining: true,
                 completionYearCE,
                 searchTokens: generateSearchTokens(data.attendeeName, data.companyName),
-            };
-            recordUpdates.push({ id: snap.id, updates });
-        }
+            },
+        });
     }
 
-    // Write in batches
-    const toWrite = recordUpdates.filter(r => Object.keys(r.updates).length > 0);
-    const skipped = recordUpdates.length - toWrite.length;
+    const skipped = alreadyCompleted.length;
 
-    for (let i = 0; i < toWrite.length; i += WRITE_CHUNK) {
-        const chunk = toWrite.slice(i, i + WRITE_CHUNK);
+    for (let i = 0; i < recordUpdates.length; i += WRITE_CHUNK) {
+        const chunk = recordUpdates.slice(i, i + WRITE_CHUNK);
         const batch = writeBatch(db);
-        chunk.forEach(({ id, updates }) => batch.update(doc(db, 'trainingRecords', id), updates));
+        chunk.forEach(({ id, updates }) => batch.update(doc(db, 'trainingRecords', id), updates as Partial<TrainingRecord>));
         await batch.commit();
     }
+
+    // Auto-create delivery packages for unique registrations
+    const uniqueRegIds = [...new Set(completedRegistrationIds)];
+    await Promise.allSettled(uniqueRegIds.map(rid => autoCreateDeliveryIfNeeded(rid, 'system-auto')));
 
     revalidatePath('/erp/attendees');
     revalidatePath('/erp/history');
     revalidatePath('/erp/certificate');
     return {
         success: true,
-        message: `ตัดเกรดผ่านการอบรม ${toWrite.length} ท่าน${skipped > 0 ? ` (ข้าม ${skipped} ที่ผ่านแล้ว)` : ''}`,
-        completed: toWrite.length,
+        message: `ตัดเกรดผ่านการอบรม ${recordUpdates.length} ท่าน${skipped > 0 ? ` (ข้าม ${skipped} ที่ผ่านแล้ว)` : ''}`,
+        completed: recordUpdates.length,
         skipped,
     };
 }

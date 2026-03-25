@@ -14,22 +14,13 @@ import { Loader2, Search, CheckCircle2, AlertCircle, FileText, UploadCloud, Tras
 import type { TrainingRecord, AttendeeData } from '@/lib/course-data';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { validateThaiID } from '@/lib/attendee-utils';
 
 interface EditAttendeeModalProps {
     isOpen: boolean;
     onClose: () => void;
     record: TrainingRecord | null;
     onSuccess: () => void;
-}
-
-export function validateThaiID(id: string) {
-    if (!/^[0-9]{13}$/.test(id)) return false;
-    let sum = 0;
-    for (let i = 0; i < 12; i++) {
-        sum += parseInt(id.charAt(i)) * (13 - i);
-    }
-    const checkDigit = (11 - (sum % 11)) % 10;
-    return checkDigit === parseInt(id.charAt(12));
 }
 
 export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAttendeeModalProps) {
@@ -53,7 +44,6 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
 
     // Auto-fill state
     const [isCheckingId, setIsCheckingId] = useState(false);
-    const [foundExistingAttendee, setFoundExistingAttendee] = useState<AttendeeData | null>(null);
 
     useEffect(() => {
         if (record && isOpen) {
@@ -65,72 +55,48 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
             setDateOfBirth((record as any).dateOfBirth || '');
             setEducation((record as any).education || '');
             setDocuments((record as any).documents || []);
-            setFoundExistingAttendee(null);
             setUploadProgress(null);
         }
     }, [record, isOpen]);
 
     useEffect(() => {
         if (attendeeId.length === 13 && validateThaiID(attendeeId) && firestore && attendeeId !== record?.attendeeId) {
-            handleCheckExistingId(attendeeId);
-        } else {
-            setFoundExistingAttendee(null);
+            autoLinkAttendee(attendeeId);
         }
     }, [attendeeId, firestore]);
 
-    const handleCheckExistingId = async (id: string) => {
+    const autoLinkAttendee = async (id: string) => {
         if (!firestore) return;
         setIsCheckingId(true);
         try {
-            const attendeeDocRef = doc(firestore, 'attendees', id);
-            const attendeeSnap = await getDoc(attendeeDocRef);
-            
+            const attendeeSnap = await getDoc(doc(firestore, 'attendees', id));
             if (attendeeSnap.exists()) {
-                setFoundExistingAttendee({ id: attendeeSnap.id, ...attendeeSnap.data() } as AttendeeData);
+                const data = attendeeSnap.data() as AttendeeData;
+                if (data.fullName && !attendeeName) setAttendeeName(data.fullName);
+                if (data.dateOfBirth && !dateOfBirth) setDateOfBirth(data.dateOfBirth);
+                if (data.education && !education) setEducation(data.education);
+                if (data.documents?.length) {
+                    const urls = data.documents.map(d => typeof d === 'string' ? d : d.url);
+                    setDocuments(prev => [...new Set([...prev, ...urls])]);
+                }
+                toast({ title: 'พบข้อมูลเดิมในระบบ', description: `โหลดข้อมูลของ ${data.fullName} แล้ว` });
             } else {
-                const recordsRef = collection(firestore, 'trainingRecords');
-                const q = query(recordsRef, where('attendeeId', '==', id));
-                const snap = await getDocs(q);
+                const snap = await getDocs(query(collection(firestore, 'trainingRecords'), where('attendeeId', '==', id)));
                 if (!snap.empty) {
-                    const firstMatch = snap.docs[0].data();
-                    setFoundExistingAttendee({
-                        id: id,
-                        attendeeId: id,
-                        fullName: firstMatch.attendeeName,
-                        companyName: firstMatch.companyName,
-                        phone: firstMatch.phoneNumber || '',
-                        email: firstMatch.emailAddress || '',
-                        dateOfBirth: firstMatch.dateOfBirth || '',
-                        education: firstMatch.education || '',
-                        documents: firstMatch.documents || []
-                    } as any);
+                    const d = snap.docs[0].data();
+                    if (d.attendeeName && !attendeeName) setAttendeeName(d.attendeeName);
+                    if (d.companyName && !companyName) setCompanyName(d.companyName);
+                    if (d.phoneNumber && !phoneNumber) setPhoneNumber(d.phoneNumber);
+                    if (d.emailAddress && !emailAddress) setEmailAddress(d.emailAddress);
+                    if (d.dateOfBirth && !dateOfBirth) setDateOfBirth(d.dateOfBirth);
+                    if (d.education && !education) setEducation(d.education);
+                    toast({ title: 'พบข้อมูลเดิมในระบบ', description: `โหลดข้อมูลของ ${d.attendeeName} แล้ว` });
                 }
             }
         } catch (error) {
-            console.error("Error checking ID:", error);
+            console.error('Error auto-linking attendee:', error);
         } finally {
             setIsCheckingId(false);
-        }
-    };
-
-    const applyExistingData = () => {
-        if (foundExistingAttendee) {
-            if (foundExistingAttendee.fullName) setAttendeeName(foundExistingAttendee.fullName);
-            if ((foundExistingAttendee as any).companyName) setCompanyName((foundExistingAttendee as any).companyName);
-            if ((foundExistingAttendee as any).phone) setPhoneNumber((foundExistingAttendee as any).phone);
-            if ((foundExistingAttendee as any).email) setEmailAddress((foundExistingAttendee as any).email);
-            if (foundExistingAttendee.dateOfBirth) setDateOfBirth(foundExistingAttendee.dateOfBirth);
-            if (foundExistingAttendee.education) setEducation(foundExistingAttendee.education);
-            if (foundExistingAttendee.documents) {
-                const existingDocs = foundExistingAttendee.documents.map(d => typeof d === 'string' ? d : d.url);
-                setDocuments((prev) => [...new Set([...prev, ...existingDocs])]);
-            }
-            
-            toast({
-                title: 'โหลดข้อมูลเดิมสำเร็จ',
-                description: 'ดึงข้อมูลประวัติย้อนหลังมาเติมลงในฟอร์มเรียบร้อยแล้ว',
-            });
-            setFoundExistingAttendee(null);
         }
     };
 
@@ -260,25 +226,6 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                         </div>
                                         {attendeeId.length === 13 && !validateThaiID(attendeeId) && <p className="text-[11px] text-rose-500 font-bold mt-1">รูปแบบรหัส 13 หลักไม่ถูกต้อง (Check Digit Failed)</p>}
                                     </div>
-
-                                    {foundExistingAttendee && (
-                                        <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start gap-4 shadow-sm animate-in fade-in slide-in-from-top-2">
-                                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                                                <AlertCircle className="w-5 h-5 text-amber-600" />
-                                            </div>
-                                            <div className="flex-1 pt-0.5">
-                                                <h4 className="text-sm font-bold text-amber-900">พบข้อมูลประวัติเดิมในระบบ Cloud</h4>
-                                                <div className="text-xs text-amber-700 mt-1.5 space-y-0.5">
-                                                    <p>ชื่อ: <span className="font-semibold">{foundExistingAttendee.fullName}</span></p>
-                                                    {(foundExistingAttendee as any).companyName && <p>สังกัด: <span className="font-semibold">{(foundExistingAttendee as any).companyName}</span></p>}
-                                                    {foundExistingAttendee.education && <p>วุฒิ: <span className="font-semibold">{foundExistingAttendee.education}</span></p>}
-                                                </div>
-                                                <Button size="sm" onClick={applyExistingData} className="mt-3 w-full bg-amber-500 hover:bg-amber-600 shadow-sm text-amber-50 font-bold rounded-lg h-9">
-                                                    สวมทับฟอร์มด้วยข้อมูลเดิม
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )}
 
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         <div className="space-y-2">

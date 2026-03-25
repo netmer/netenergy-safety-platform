@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import Link from 'next/link';
 import type { TrainingRecord, TrainingSchedule, Course, CourseCategory, CertificateTemplate as TemplateType } from '@/lib/course-data';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from '@/components/ui/badge';
-import { Award, History, FileSignature, Printer, X, Filter, Users, Calendar as CalendarIcon } from 'lucide-react';
+import { Award, History, FileSignature, Printer, X, Filter, Users, Calendar as CalendarIcon, Package } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { CertificateTemplate } from './certificate-template';
 import { CertificateSearchForm } from './certificate-search-form';
@@ -21,13 +22,14 @@ interface CertificateClientPageProps {
   courses: Course[];
   categories: CourseCategory[];
   templates: TemplateType[];
+  initialScheduleId?: string | null;
 }
 
-export function CertificateClientPage({ records, schedules, courses, categories, templates }: CertificateClientPageProps) {
+export function CertificateClientPage({ records, schedules, courses, categories, templates, initialScheduleId }: CertificateClientPageProps) {
     const [recordToView, setRecordToView] = useState<TrainingRecord | null>(null);
     const [categoryFilter, setCategoryFilter] = useState<string>('all');
     const [courseFilter, setCourseFilter] = useState<string>('all');
-    const [scheduleFilter, setScheduleFilter] = useState<string>('all');
+    const [scheduleFilter, setScheduleFilter] = useState<string>(initialScheduleId ?? 'all');
     const [searchQuery, setSearchQuery] = useState('');
 
     const coursesMap = useMemo(() => new Map(courses.map(c => [c.id, c])), [courses]);
@@ -49,10 +51,6 @@ export function CertificateClientPage({ records, schedules, courses, categories,
         <Separator className="opacity-50" />
         
         <div className="space-y-6 text-left">
-            <h3 className="text-2xl font-bold font-headline flex items-center gap-3 px-4 md:px-0">
-                <History className="text-primary"/> ค้นหาใบประกาศรายรอบ
-            </h3>
-
             <Card className="border-none shadow-lg rounded-[2.5rem] overflow-hidden bg-white dark:bg-slate-950">
                 <CardHeader className="bg-muted/30 border-b pb-8">
                     <CourseFilters 
@@ -72,11 +70,18 @@ export function CertificateClientPage({ records, schedules, courses, categories,
 
                 {scheduleFilter !== 'all' ? (
                     <CardContent className="p-0">
-                        <div className="p-8 border-b">
-                            <h4 className="text-xl font-bold font-headline">{schedulesMap.get(scheduleFilter)?.courseTitle}</h4>
-                            <div className="flex gap-2 mt-3">
-                                <Badge variant="secondary" className="bg-blue-50 text-blue-700 font-bold"><Users className="w-3.5 h-3.5 mr-1.5"/>{displayedRecords.length} คน</Badge>
+                        <div className="p-8 border-b flex items-start justify-between gap-4">
+                            <div>
+                                <h4 className="text-xl font-bold font-headline">{schedulesMap.get(scheduleFilter)?.courseTitle}</h4>
+                                <div className="flex gap-2 mt-3">
+                                    <Badge variant="secondary" className="bg-blue-50 text-blue-700 font-bold"><Users className="w-3.5 h-3.5 mr-1.5"/>{displayedRecords.length} คน</Badge>
+                                </div>
                             </div>
+                            <Button asChild variant="outline" size="sm" className="rounded-xl font-bold shadow-sm border-violet-200 text-violet-700 hover:bg-violet-50 shrink-0">
+                                <Link href={`/erp/delivery?scheduleId=${scheduleFilter}`}>
+                                    <Package className="w-4 h-4 mr-2"/> จัดการการจัดส่ง
+                                </Link>
+                            </Button>
                         </div>
                         <Table>
                             <TableHeader className="bg-slate-50/50">

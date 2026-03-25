@@ -200,7 +200,7 @@ export type AppUser = {
   displayName?: string;
   nickname?: string;
   photoURL?: string;
-  role: 'admin' | 'call_center' | 'training_team' | 'inspection_team' | 'accounting_team';
+  role: 'admin' | 'course_specialist' | 'training_team' | 'inspection_team' | 'accounting_team';
 };
 
 export type Client = {
@@ -307,6 +307,13 @@ export type DeliveryPackage = {
 };
 
 // Notification System Types
+export type CertificateTemplate = {
+    id: string;
+    name: string;
+    backgroundImageUrl: string;
+    hint?: string;
+};
+
 export type AppNotificationType = 'info' | 'success' | 'warning' | 'error' | 'important';
 
 export type AppNotification = {

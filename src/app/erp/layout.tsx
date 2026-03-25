@@ -48,7 +48,7 @@ import {
   useSidebar
 } from '@/components/ui/sidebar';
 
-const ERP_ROLES: AppUser['role'][] = ['admin', 'call_center', 'training_team', 'inspection_team', 'accounting_team'];
+const ERP_ROLES: AppUser['role'][] = ['admin', 'course_specialist', 'training_team', 'inspection_team', 'accounting_team'];
 
 const erpNavGroups = [
   {
@@ -60,8 +60,8 @@ const erpNavGroups = [
   {
     label: "Operations",
     items: [
-      { href: '/erp/schedule', label: 'จัดการตารางอบรม', Icon: Calendar, roles: ['admin', 'call_center'] },
-      { href: '/erp/registrations', label: 'ข้อมูลการลงทะเบียน', Icon: ClipboardList, roles: ['admin', 'call_center', 'training_team', 'inspection_team'] },
+      { href: '/erp/schedule', label: 'จัดการตารางอบรม', Icon: Calendar, roles: ['admin', 'course_specialist'] },
+      { href: '/erp/registrations', label: 'ข้อมูลการลงทะเบียน', Icon: ClipboardList, roles: ['admin', 'course_specialist', 'training_team', 'inspection_team'] },
       { href: '/erp/attendees', label: 'จัดการข้อมูลผู้อบรม', Icon: Users, roles: ['admin', 'training_team', 'inspection_team'] },
     ]
   },
@@ -69,7 +69,7 @@ const erpNavGroups = [
     label: "Records & Billing",
     items: [
       { href: '/erp/billing', label: 'การเงิน/บัญชี', Icon: CreditCard, roles: ['admin', 'accounting_team'] },
-      { href: '/erp/delivery', label: 'การจัดส่ง', Icon: Package, roles: ['admin', 'call_center', 'training_team'] },
+      { href: '/erp/delivery', label: 'การจัดส่ง', Icon: Package, roles: ['admin', 'course_specialist', 'training_team'] },
       { href: '/erp/history', label: 'ประวัติการอบรม', Icon: History, roles: ['admin', 'training_team', 'inspection_team'] },
       { href: '/erp/certificate', label: 'พิมพ์ใบประกาศ', Icon: Award, roles: ['admin', 'training_team'] },
     ]

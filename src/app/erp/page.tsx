@@ -30,16 +30,26 @@ async function getDashboardData() {
         where('expiryDate', '<=', in90Days.toISOString())
     );
 
+    const docsVerifiedQuery = query(collection(db, 'trainingRecords'), where('status', '==', 'docs_verified'));
+    const completedNoCertQuery = query(collection(db, 'trainingRecords'), where('status', '==', 'completed'));
+    const pendingDeliveryQuery = query(collection(db, 'deliveryPackages'), where('overallStatus', '==', 'รอดำเนินการ'));
+
     const [
-        activeSchedulesSnapshot, 
-        pendingRegistrationsSnapshot, 
+        activeSchedulesSnapshot,
+        pendingRegistrationsSnapshot,
         pendingVerificationSnapshot,
-        expiringSoonCountSnapshot
+        expiringSoonCountSnapshot,
+        docsVerifiedSnapshot,
+        completedNoCertSnapshot,
+        pendingDeliverySnapshot,
     ] = await Promise.all([
         getDocs(activeSchedulesQuery),
         getCountFromServer(pendingRegistrationsQuery),
         getCountFromServer(pendingVerificationQuery),
-        getCountFromServer(expiringSoonQuery)
+        getCountFromServer(expiringSoonQuery),
+        getCountFromServer(docsVerifiedQuery),
+        getCountFromServer(completedNoCertQuery),
+        getCountFromServer(pendingDeliveryQuery),
     ]);
 
     const keyMetrics = {
@@ -47,6 +57,14 @@ async function getDashboardData() {
         pendingRegistrations: pendingRegistrationsSnapshot.data().count,
         pendingVerification: pendingVerificationSnapshot.data().count,
         expiringSoon: expiringSoonCountSnapshot.data().count,
+    };
+
+    const pipeline = {
+        pendingRegistrations: pendingRegistrationsSnapshot.data().count,
+        pendingVerification: pendingVerificationSnapshot.data().count,
+        docsVerified: docsVerifiedSnapshot.data().count,
+        completedNoCert: completedNoCertSnapshot.data().count,
+        pendingDelivery: pendingDeliverySnapshot.data().count,
     };
 
     // --- Next Upcoming Schedule ---
@@ -119,6 +137,7 @@ async function getDashboardData() {
 
     return {
         keyMetrics,
+        pipeline,
         upcomingSchedule: upcomingScheduleData,
         recentRegistrations,
         expiringRecords: expiringRecordsWithCourses,

@@ -363,10 +363,6 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
         <div className="space-y-6 pb-20">
             {/* Top Bar Filters */}
             <div className="flex flex-col gap-4 text-left">
-                <div>
-                    <h1 className="text-3xl font-bold font-headline tracking-tight text-slate-900 dark:text-white">จัดการข้อมูลลงทะเบียน</h1>
-                    <p className="text-muted-foreground mt-1 font-light">ค้นหา กรอง และจัดการใบสมัครทั้งหมด</p>
-                </div>
                 <Card className="border-none shadow-sm rounded-3xl bg-white dark:bg-slate-900/40 p-6">
                     <CourseFilters 
                         courses={courses} categories={categories} schedules={schedules}
@@ -467,7 +463,12 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
                                             {schedulesMap.get(selectedRegistration.scheduleId)?.location || 'N/A'}
                                         </p>
                                     </div>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button asChild size="sm" variant="outline" className="rounded-xl h-10 shadow-sm font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50">
+                                            <Link href={`/erp/attendees?scheduleId=${selectedRegistration.scheduleId}`}>
+                                                <Users className="w-4 h-4 mr-2"/> ดูผู้อบรมในรอบนี้
+                                            </Link>
+                                        </Button>
                                         <Button size="sm" variant="outline" className="rounded-xl h-10 shadow-sm font-bold" onClick={() => handleAction(createQuotationAction, selectedRegistration.id)} disabled={processingId === selectedRegistration.id}>
                                             <FileText className="w-4 h-4 mr-2"/> ออกใบเสนอราคา
                                         </Button>

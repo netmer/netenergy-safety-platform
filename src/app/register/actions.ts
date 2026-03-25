@@ -187,15 +187,24 @@ export async function submitRegistration(prevState: RegistrationFormState, formD
         html: template.html,
     });
 
-    // Notify System Admins
-    await createSystemNotification({
-        title: 'มีการลงทะเบียนใหม่',
-        message: `${user.displayName || 'ลูกค้า'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
-        type: 'important',
-        link: '/erp/registrations',
-        forRole: 'admin',
-        sendEmailTo: 'admin@netenergy-tech.com'
-    });
+    // Notify admin and course_specialist
+    await Promise.all([
+        createSystemNotification({
+            title: 'มีการลงทะเบียนใหม่',
+            message: `${user.displayName || 'ลูกค้า'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
+            type: 'important',
+            link: '/erp/registrations',
+            forRole: 'admin',
+            sendEmailTo: 'admin@netenergy-tech.com'
+        }),
+        createSystemNotification({
+            title: 'มีการลงทะเบียนใหม่',
+            message: `${user.displayName || 'ลูกค้า'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
+            type: 'info',
+            link: '/erp/registrations',
+            forRole: 'course_specialist',
+        }),
+    ]);
 
     revalidatePath(`/register/${scheduleId}`);
     revalidatePath(`/profile`);

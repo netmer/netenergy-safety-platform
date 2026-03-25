@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, BookOpen, Clock, Users, Calendar, ClipboardList, MapPin, Sparkles, AlertTriangle } from 'lucide-react';
+import { ArrowRight, BookOpen, Clock, Users, Calendar, ClipboardList, MapPin, Sparkles, AlertTriangle, ChevronRight } from 'lucide-react';
 import { format, differenceInDays, parseISO } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { Separator } from '@/components/ui/separator';
@@ -18,6 +18,13 @@ interface ErpDashboardClientPageProps {
         pendingRegistrations: number;
         pendingVerification: number;
         expiringSoon: number;
+    };
+    pipeline: {
+        pendingRegistrations: number;
+        pendingVerification: number;
+        docsVerified: number;
+        completedNoCert: number;
+        pendingDelivery: number;
     };
     upcomingSchedule: (TrainingSchedule & { course: Course }) | null;
     recentRegistrations: (Registration & { course?: Course }) [];
@@ -31,8 +38,9 @@ const registrationStatusConfig: Record<Registration['status'], { label: string; 
 };
 
 
-export function ErpDashboardClientPage({ 
-    keyMetrics, 
+export function ErpDashboardClientPage({
+    keyMetrics,
+    pipeline,
     upcomingSchedule,
     recentRegistrations,
     expiringRecords
@@ -54,8 +62,7 @@ export function ErpDashboardClientPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col md:flex-row justify-between gap-4">
-        <h1 className="text-3xl font-bold">ERP Dashboard</h1>
+      <div className="flex justify-end">
         <Button asChild>
             <Link href="/erp/schedule">
                 <Calendar className="mr-2 h-4 w-4" /> จัดการตารางอบรม
@@ -105,6 +112,40 @@ export function ErpDashboardClientPage({
           </CardContent>
         </Card>
       </div>
+
+      {/* Workflow Pipeline */}
+      <Card className="overflow-hidden">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-bold flex items-center gap-2">
+            <ArrowRight className="w-4 h-4 text-primary" /> สถานะงานในระบบ (Workflow Pipeline)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto">
+            <div className="flex items-stretch gap-0 min-w-[700px]">
+              {[
+                { count: pipeline.pendingRegistrations, label: 'ใบสมัครรอรับรอง', href: '/erp/registrations', color: 'bg-amber-50 border-amber-200 text-amber-700' },
+                { count: pipeline.pendingVerification, label: 'รอตรวจเอกสาร', href: '/erp/attendees', color: 'bg-blue-50 border-blue-200 text-blue-700' },
+                { count: pipeline.docsVerified, label: 'เอกสารครบ / รอตัดเกรด', href: '/erp/attendees', color: 'bg-indigo-50 border-indigo-200 text-indigo-700' },
+                { count: pipeline.completedNoCert, label: 'ผ่านอบรม / รอออกใบเซอร์', href: '/erp/certificate', color: 'bg-emerald-50 border-emerald-200 text-emerald-700' },
+                { count: pipeline.pendingDelivery, label: 'รอจัดส่ง', href: '/erp/delivery', color: 'bg-violet-50 border-violet-200 text-violet-700' },
+              ].map((stage, i, arr) => (
+                <div key={stage.label} className="flex items-center flex-1">
+                  <Link href={stage.href} className={cn(
+                    'flex-1 flex flex-col items-center justify-center gap-1 p-4 rounded-2xl border text-center transition-all hover:shadow-md',
+                    stage.count > 0 ? stage.color : 'bg-muted/30 border-muted text-muted-foreground opacity-50',
+                  )}>
+                    <span className="text-3xl font-black tabular-nums">{stage.count}</span>
+                    <span className="text-[11px] font-bold leading-tight">{stage.label}</span>
+                    {stage.count > 0 && <span className="text-[10px] font-semibold opacity-70 mt-0.5">ดูรายการ →</span>}
+                  </Link>
+                  {i < arr.length - 1 && <ChevronRight className="w-5 h-5 text-muted-foreground/40 mx-1 shrink-0" />}
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <Card className="xl:col-span-2">
