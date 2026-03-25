@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useActionState, useTransition } from 'react';
-import type { AppUser } from '@/lib/course-data';
+import type { AppUser, CustomerProfile } from '@/lib/course-data';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { MoreHorizontal, PlusCircle, Pencil, Trash2, Loader2, ShieldCheck, UserCog } from 'lucide-react';
+import { MoreHorizontal, PlusCircle, Pencil, Trash2, Loader2, ShieldCheck, Users, UserCog } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
@@ -17,6 +18,8 @@ import { useToast } from '@/hooks/use-toast';
 import { createUser, updateUser, deleteUser, type UserFormState } from './actions';
 import { useFormStatus } from 'react-dom';
 import { cn } from '@/lib/utils';
+import { format, parseISO } from 'date-fns';
+import { th } from 'date-fns/locale';
 
 const initialFormState: UserFormState = { message: '', errors: {} };
 
@@ -43,7 +46,7 @@ function SubmitButton({ isEditing }: { isEditing: boolean }) {
     );
 }
 
-export function UsersClientPage({ users }: { users: AppUser[] }) {
+export function UsersClientPage({ users, customers }: { users: AppUser[]; customers: CustomerProfile[] }) {
     const { toast } = useToast();
     const [isPending, startTransition] = useTransition();
 
@@ -94,51 +97,124 @@ export function UsersClientPage({ users }: { users: AppUser[] }) {
                 <div className="flex items-center justify-between">
                     <div>
                         <CardTitle>จัดการบัญชีผู้ใช้</CardTitle>
-                        <CardDescription>เพิ่ม, แก้ไข, และลบบัญชีผู้ใช้ในระบบ</CardDescription>
+                        <CardDescription>จัดการบัญชีทีมงานและดูบัญชีลูกค้าที่ลงทะเบียนในระบบ</CardDescription>
                     </div>
-                    <Button onClick={handleOpenCreateForm}>
-                        <PlusCircle className="mr-2 h-4 w-4" /> เพิ่มผู้ใช้ใหม่
-                    </Button>
                 </div>
             </CardHeader>
             <CardContent>
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>ชื่อที่แสดง</TableHead>
-                            <TableHead>อีเมล</TableHead>
-                            <TableHead>บทบาท</TableHead>
-                            <TableHead><span className="sr-only">Actions</span></TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {users.map((user) => (
-                            <TableRow key={user.uid}>
-                                <TableCell className="font-medium">{user.displayName}</TableCell>
-                                <TableCell>{user.email}</TableCell>
-                                <TableCell><RoleBadge role={user.role} /></TableCell>
-                                <TableCell className="text-right">
-                                    <DropdownMenu>
-                                        <DropdownMenuTrigger asChild><Button aria-haspopup="true" size="icon" variant="ghost"><MoreHorizontal className="h-4 w-4" /><span className="sr-only">Toggle menu</span></Button></DropdownMenuTrigger>
-                                        <DropdownMenuContent align="end">
-                                            <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                                            <DropdownMenuItem onClick={() => handleOpenEditForm(user)}><Pencil className="mr-2 h-4 w-4" />แก้ไข</DropdownMenuItem>
-                                            <DropdownMenuItem className="text-destructive" onClick={() => handleOpenDeleteAlert(user)}><Trash2 className="mr-2 h-4 w-4" />ลบ</DropdownMenuItem>
-                                        </DropdownMenuContent>
-                                    </DropdownMenu>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                <Tabs defaultValue="staff">
+                    <TabsList className="mb-6">
+                        <TabsTrigger value="staff" className="gap-2">
+                            <UserCog className="h-4 w-4" />
+                            ทีมงาน
+                            <Badge variant="secondary" className="ml-1 text-xs">{users.length}</Badge>
+                        </TabsTrigger>
+                        <TabsTrigger value="customers" className="gap-2">
+                            <Users className="h-4 w-4" />
+                            ลูกค้า
+                            <Badge variant="secondary" className="ml-1 text-xs">{customers.length}</Badge>
+                        </TabsTrigger>
+                    </TabsList>
+
+                    {/* Staff Tab */}
+                    <TabsContent value="staff">
+                        <div className="flex justify-end mb-4">
+                            <Button onClick={handleOpenCreateForm}>
+                                <PlusCircle className="mr-2 h-4 w-4" /> เพิ่มทีมงานใหม่
+                            </Button>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>ชื่อที่แสดง</TableHead>
+                                    <TableHead>อีเมล</TableHead>
+                                    <TableHead>บทบาท</TableHead>
+                                    <TableHead><span className="sr-only">Actions</span></TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {users.map((user) => (
+                                    <TableRow key={user.uid}>
+                                        <TableCell className="font-medium">{user.displayName}</TableCell>
+                                        <TableCell>{user.email}</TableCell>
+                                        <TableCell><RoleBadge role={user.role} /></TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild><Button aria-haspopup="true" size="icon" variant="ghost"><MoreHorizontal className="h-4 w-4" /><span className="sr-only">Toggle menu</span></Button></DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                                                    <DropdownMenuItem onClick={() => handleOpenEditForm(user)}><Pencil className="mr-2 h-4 w-4" />แก้ไข</DropdownMenuItem>
+                                                    <DropdownMenuItem className="text-destructive" onClick={() => handleOpenDeleteAlert(user)}><Trash2 className="mr-2 h-4 w-4" />ลบ</DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {users.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={4} className="text-center text-muted-foreground py-8">ยังไม่มีบัญชีทีมงาน</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TabsContent>
+
+                    {/* Customers Tab */}
+                    <TabsContent value="customers">
+                        <div className="mb-4 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800">
+                            <p className="text-sm text-muted-foreground flex items-center gap-2">
+                                <ShieldCheck className="h-4 w-4 text-green-500" />
+                                บัญชีลูกค้าสร้างโดยอัตโนมัติเมื่อลูกค้าเข้าสู่ระบบด้วย Google OAuth ครั้งแรก
+                            </p>
+                        </div>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>ชื่อที่แสดง</TableHead>
+                                    <TableHead>อีเมล</TableHead>
+                                    <TableHead>สมัครเมื่อ</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {customers.map((customer) => (
+                                    <TableRow key={customer.uid}>
+                                        <TableCell className="font-medium">
+                                            <div className="flex items-center gap-2">
+                                                {customer.photoURL ? (
+                                                    // eslint-disable-next-line @next/next/no-img-element
+                                                    <img src={customer.photoURL} alt="" className="h-7 w-7 rounded-full object-cover" />
+                                                ) : (
+                                                    <div className="h-7 w-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
+                                                        {customer.displayName?.[0]?.toUpperCase() || customer.email[0]?.toUpperCase()}
+                                                    </div>
+                                                )}
+                                                {customer.displayName || '—'}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>{customer.email}</TableCell>
+                                        <TableCell className="text-muted-foreground text-sm">
+                                            {customer.createdAt ? format(parseISO(customer.createdAt), 'd MMM yyyy', { locale: th }) : '—'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                                {customers.length === 0 && (
+                                    <TableRow>
+                                        <TableCell colSpan={3} className="text-center text-muted-foreground py-8">ยังไม่มีลูกค้าลงทะเบียนในระบบ</TableCell>
+                                    </TableRow>
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TabsContent>
+                </Tabs>
             </CardContent>
-            
+
+            {/* Staff Create/Edit Dialog */}
             <Dialog open={isFormOpen} onOpenChange={(isOpen) => { if (!isOpen) handleCloseDialogs(); else setIsFormOpen(true);}}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>{userToEdit ? 'แก้ไขข้อมูลผู้ใช้' : 'เพิ่มผู้ใช้ใหม่'}</DialogTitle>
+                        <DialogTitle>{userToEdit ? 'แก้ไขข้อมูลทีมงาน' : 'เพิ่มทีมงานใหม่'}</DialogTitle>
                         <DialogDescription className="sr-only">
-                          จัดการบัญชีผู้ใช้งานระบบและกำหนดบทบาทการทำงาน
+                          จัดการบัญชีทีมงานและกำหนดบทบาทการทำงาน
                         </DialogDescription>
                     </DialogHeader>
                     <form key={userToEdit?.uid ?? 'create'} action={formAction} className="grid gap-4 py-4">

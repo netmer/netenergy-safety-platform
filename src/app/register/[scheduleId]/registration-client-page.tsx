@@ -16,11 +16,12 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Loader2, PlusCircle, Trash2, CheckCircle, File as FileIcon, Sparkles, User, Building } from 'lucide-react';
+import { Loader2, PlusCircle, Trash2, CheckCircle, File as FileIcon, Sparkles, User, Building, LogIn, History } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { AdminLogin } from '@/components/auth/admin-login';
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 interface RegistrationClientPageProps {
     course: Course;
@@ -416,22 +417,6 @@ export function RegistrationClientPage({ course, schedule, form, clients }: Regi
         );
     }
     
-    if (!user) {
-        return (
-            <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden">
-                <CardHeader className="bg-slate-900 text-white p-10">
-                    <CardTitle className="text-3xl font-headline mb-2">กรุณาเข้าสู่ระบบ</CardTitle>
-                    <CardDescription className="text-slate-400 text-lg">
-                        เพื่อให้ข้อมูลการสมัครถูกบันทึกไว้ในประวัติของคุณ และเพื่อความสะดวกในการสมัครครั้งถัดไปครับ
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="p-10">
-                    <AdminLogin />
-                </CardContent>
-            </Card>
-        )
-    }
-    
     if (state.success) {
         return (
             <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden animate-in zoom-in-95 duration-500">
@@ -446,9 +431,34 @@ export function RegistrationClientPage({ course, schedule, form, clients }: Regi
                 </CardHeader>
                 <CardContent className="p-12 text-center">
                     <div className="space-y-4">
-                        <Button asChild className="w-full h-14 rounded-2xl text-lg font-bold">
-                            <Link href="/profile">ดูสถานะการสมัครของฉัน</Link>
-                        </Button>
+                        {user ? (
+                            <Button asChild className="w-full h-14 rounded-2xl text-lg font-bold">
+                                <Link href="/training-history">
+                                    <History className="mr-2 h-5 w-5" />
+                                    ดูประวัติการอบรมของฉัน
+                                </Link>
+                            </Button>
+                        ) : (
+                            <div className="p-5 rounded-2xl bg-primary/5 border border-primary/20 text-left space-y-3">
+                                <p className="text-sm font-semibold text-primary flex items-center gap-2">
+                                    <LogIn className="h-4 w-4" />
+                                    สมัครบัญชีเพื่อติดตามสถานะการอบรม
+                                </p>
+                                <p className="text-xs text-muted-foreground font-light">เข้าสู่ระบบด้วย Google เพื่อดูสถานะการสมัครและประวัติการอบรมของคุณได้ตลอดเวลา</p>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    className="w-full rounded-xl"
+                                    onClick={async () => {
+                                        const provider = new GoogleAuthProvider();
+                                        try { await signInWithPopup(auth, provider); } catch {}
+                                    }}
+                                >
+                                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                                    เข้าสู่ระบบด้วย Google
+                                </Button>
+                            </div>
+                        )}
                         <Button asChild variant="ghost" className="w-full h-12 rounded-2xl">
                             <Link href="/">กลับสู่หน้าแรก</Link>
                         </Button>
@@ -458,10 +468,38 @@ export function RegistrationClientPage({ course, schedule, form, clients }: Regi
         );
     }
     
+    const guestUserPayload = JSON.stringify({ uid: null, email: null, displayName: null, isGuest: true });
+    const userPayload = user ? JSON.stringify({ uid: user.uid, email: user.email, displayName: user.displayName }) : guestUserPayload;
+
     return (
+        <div className="space-y-4">
+        {!user && (
+            <div className="flex items-start gap-4 p-5 rounded-[1.5rem] bg-primary/5 border border-primary/20">
+                <div className="p-2.5 rounded-xl bg-primary/10 shrink-0 mt-0.5">
+                    <LogIn className="h-5 w-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm text-primary mb-0.5">เข้าสู่ระบบเพื่อบันทึกประวัติการอบรม</p>
+                    <p className="text-xs text-muted-foreground font-light">สมัครบัญชีฟรีด้วย Google เพื่อติดตามสถานะและดูประวัติการอบรมของคุณได้ตลอดเวลา</p>
+                </div>
+                <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 rounded-xl text-xs font-bold"
+                    onClick={async () => {
+                        const provider = new GoogleAuthProvider();
+                        try { await signInWithPopup(auth, provider); } catch {}
+                    }}
+                >
+                    <svg className="mr-1.5 h-3.5 w-3.5" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+                    เข้าสู่ระบบ
+                </Button>
+            </div>
+        )}
         <Card className="rounded-[2.5rem] border-none shadow-2xl overflow-hidden bg-white dark:bg-slate-950">
             <form action={formAction}>
-                <input type="hidden" name="user" value={JSON.stringify(user)} />
+                <input type="hidden" name="user" value={userPayload} />
                 <input type="hidden" name="scheduleId" value={schedule.id} />
                 <input type="hidden" name="courseId" value={course.id} />
                 <input type="hidden" name="formId" value={form.id} />
@@ -537,5 +575,6 @@ export function RegistrationClientPage({ course, schedule, form, clients }: Regi
                 </CardFooter>
             </form>
         </Card>
+        </div>
     );
 }

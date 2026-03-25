@@ -6,7 +6,6 @@ import { doc, getDoc, addDoc, collection, updateDoc, query, where, getDocs, orde
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { revalidatePath } from 'next/cache';
 import type { Course, RegistrationFormField, RegistrationAttendee, RegistrationForm, Client, Registration } from '@/lib/course-data';
-import type { User } from 'firebase/auth';
 import { sendEmail, emailTemplates } from '@/lib/mail';
 import { createSystemNotification } from '@/lib/notifications';
 
@@ -49,12 +48,28 @@ async function findOrCreateClient(companyName: string): Promise<string> {
     }
 }
 
+interface RegistrationUser {
+  uid: string | null;
+  email: string | null;
+  displayName: string | null;
+  isGuest?: boolean;
+}
+
 export async function submitRegistration(prevState: RegistrationFormState, formData: FormData): Promise<RegistrationFormState> {
   const userJson = formData.get('user') as string;
+  let user: RegistrationUser;
+
   if (!userJson) {
-    return { success: false, message: 'กรุณาเข้าสู่ระบบเพื่อดำเนินการต่อ' };
+    user = { uid: null, email: null, displayName: null, isGuest: true };
+  } else {
+    const parsed = JSON.parse(userJson);
+    user = {
+      uid: parsed.uid || null,
+      email: parsed.email || null,
+      displayName: parsed.displayName || null,
+      isGuest: parsed.isGuest || false,
+    };
   }
-  const user: User = JSON.parse(userJson);
 
   const scheduleId = formData.get('scheduleId') as string;
   const courseId = formData.get('courseId') as string;
@@ -84,13 +99,17 @@ export async function submitRegistration(prevState: RegistrationFormState, formD
     if (registrationType === 'individual') {
         const coordinatorField = formSchema.find(f => f.type === 'coordinator');
         linkedClientCompanyName = (coordinatorField ? clientFormData[coordinatorField.id]?.name : user.displayName) || user.email || 'บุคคลทั่วไป';
-    } else {
+    } else if (registrationType === 'company') {
         linkedClientCompanyName = clientFormData.clientCompanyName || '';
         if (linkedClientCompanyName) {
             linkedClientId = await findOrCreateClient(linkedClientCompanyName);
         }
     }
-    
+
+    if (!linkedClientCompanyName) {
+        linkedClientCompanyName = user.displayName || user.email || 'บุคคลทั่วไป';
+    }
+
     formSchema.forEach(field => {
         if(clientFormData[field.id]) {
             dataToSave[field.id] = clientFormData[field.id];
@@ -142,9 +161,9 @@ export async function submitRegistration(prevState: RegistrationFormState, formD
     const courseTitle = (courseDoc.data() as Course).title;
 
     const registrationDocRef = await addDoc(collection(db, 'registrations'), {
-      userId: user.uid,
-      userDisplayName: user.displayName,
-      userEmail: user.email,
+      userId: user.uid,            // null for guests
+      userDisplayName: user.displayName || 'ผู้เยี่ยมชม',
+      userEmail: user.email || '',
       courseId: courseId,
       courseTitle: courseTitle,
       scheduleId: scheduleId,
@@ -179,19 +198,21 @@ export async function submitRegistration(prevState: RegistrationFormState, formD
         });
     }
 
-    // Trigger Real Email Notification
-    const template = emailTemplates.registrationReceived(user.displayName || 'ลูกค้า', courseTitle);
-    await sendEmail({
-        to: user.email!,
-        subject: template.subject,
-        html: template.html,
-    });
+    // Trigger Email Notification (skip for guests without email)
+    if (!user.isGuest && user.email) {
+        const template = emailTemplates.registrationReceived(user.displayName || 'ลูกค้า', courseTitle);
+        await sendEmail({
+            to: user.email,
+            subject: template.subject,
+            html: template.html,
+        });
+    }
 
     // Notify admin and course_specialist
     await Promise.all([
         createSystemNotification({
             title: 'มีการลงทะเบียนใหม่',
-            message: `${user.displayName || 'ลูกค้า'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
+            message: `${user.displayName || 'ผู้เยี่ยมชม'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
             type: 'important',
             link: '/erp/registrations',
             forRole: 'admin',
@@ -199,7 +220,7 @@ export async function submitRegistration(prevState: RegistrationFormState, formD
         }),
         createSystemNotification({
             title: 'มีการลงทะเบียนใหม่',
-            message: `${user.displayName || 'ลูกค้า'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
+            message: `${user.displayName || 'ผู้เยี่ยมชม'} ได้ส่งแบบฟอร์มลงทะเบียนหลักสูตร ${courseTitle}`,
             type: 'info',
             link: '/erp/registrations',
             forRole: 'course_specialist',

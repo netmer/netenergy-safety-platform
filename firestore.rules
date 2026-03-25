@@ -4,7 +4,7 @@ service cloud.firestore {
   match /databases/{database}/documents {
 
     /**
-     * NetEnergy Safety Platform Security Rules v2.6
+     * NetEnergy Safety Platform Security Rules v2.7
      */
 
     function isSignedIn() {
@@ -28,12 +28,21 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // User Data
+    // Staff User Data
     match /users/{userId} {
       allow get: if isOwner(userId) || isERPStaff();
       allow list: if isERPStaff();
       allow create: if isSignedIn();
       allow update: if isOwner(userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // Customer Accounts (self-registered via Google OAuth)
+    match /customers/{customerId} {
+      allow get: if isOwner(customerId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if isSignedIn() && request.auth.uid == customerId;
+      allow update: if isOwner(customerId);
       allow delete: if isAdmin();
     }
 
@@ -52,7 +61,7 @@ service cloud.firestore {
     match /registrations/{registrationId} {
       allow get: if isOwner(resource.data.userId) || isERPStaff();
       allow list: if isERPStaff() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isSignedIn();
+      allow create: if true; // Guest + authenticated both allowed; server action validates input
       allow update, delete: if isERPStaff();
     }
 

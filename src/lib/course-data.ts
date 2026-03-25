@@ -203,6 +203,15 @@ export type AppUser = {
   role: 'admin' | 'course_specialist' | 'training_team' | 'inspection_team' | 'accounting_team';
 };
 
+export type CustomerProfile = {
+  uid: string;       // Firebase Auth UID (= Firestore doc ID in /customers)
+  email: string;
+  displayName?: string;
+  photoURL?: string;
+  createdAt: string; // ISO string
+  source: 'google_oauth';
+};
+
 export type Client = {
   id: string;
   companyName: string;

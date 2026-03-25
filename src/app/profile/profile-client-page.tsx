@@ -6,7 +6,6 @@ import { collection, query, where, orderBy } from 'firebase/firestore';
 import { useMemo, useState } from 'react';
 import type { Registration, TrainingRecord, RegistrationAttendee } from '@/lib/course-data';
 
-import { AdminLogin } from '@/components/auth/admin-login';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
@@ -15,13 +14,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { 
+import {
     Loader2, User, History, CheckCircle, Clock,
     XCircle, ArrowRight, ShieldCheck, Building, Award,
     FileText, LayoutDashboard, Download, Eye, GraduationCap, Mail,
     Calendar, AlertTriangle, ShieldX, Infinity, Users, Briefcase, PlusCircle, MessageSquare,
-    ExternalLink, ClipboardList, UserCheck, UserX, CalendarClock
+    ExternalLink, ClipboardList, UserCheck, UserX, CalendarClock, LogIn
 } from 'lucide-react';
+import { GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 import { format, parseISO, differenceInDays } from 'date-fns';
 import { th } from 'date-fns/locale';
 import Link from 'next/link';
@@ -87,7 +88,28 @@ export function ProfileClientPage() {
     }
 
     if (!user) {
-        return <AdminLogin />;
+        return (
+            <div className="flex flex-col items-center justify-center py-32 max-w-md mx-auto text-center px-4">
+                <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mb-6">
+                    <User className="h-10 w-10 text-primary" />
+                </div>
+                <h2 className="text-2xl font-bold mb-3">เข้าสู่ระบบเพื่อดูโปรไฟล์</h2>
+                <p className="text-muted-foreground font-light mb-8 leading-relaxed">
+                    เข้าสู่ระบบเพื่อดูประวัติการสมัครอบรม สถานะการยืนยัน และวุฒิบัตรของคุณ
+                </p>
+                <Button
+                    size="lg"
+                    className="rounded-2xl w-full max-w-xs"
+                    onClick={async () => {
+                        const provider = new GoogleAuthProvider();
+                        try { await signInWithPopup(auth, provider); } catch {}
+                    }}
+                >
+                    <LogIn className="mr-2 h-5 w-5" />
+                    เข้าสู่ระบบด้วย Google
+                </Button>
+            </div>
+        );
     }
 
     const companyName = registrations?.[0]?.clientCompanyName || 'ผู้ประสานงานทั่วไป';

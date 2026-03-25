@@ -1,7 +1,5 @@
-
-'use client';
-import { HistoryClientPage } from './history-client-page';
+import { TrainingHistoryRouter } from './history-client-page';
 
 export default function TrainingHistoryPage() {
-    return <HistoryClientPage />;
+    return <TrainingHistoryRouter />;
 }

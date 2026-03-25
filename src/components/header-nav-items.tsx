@@ -55,6 +55,7 @@ export function HeaderNavItems({ scrolled = false, isHomePage = false }: HeaderN
         { href: '/courses', label: 'หลักสูตร' },
         { href: '/consulting', label: 'บริการที่ปรึกษา' },
         { href: '/blog', label: 'บทความ' },
+        { href: '/training-history', label: 'ประวัติการอบรม' },
         { href: '/contact', label: 'ติดต่อเรา' },
     ];
 
