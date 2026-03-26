@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
     CreditCard, CheckCircle2, XCircle, RefreshCw, Download,
-    Terminal, Monitor, Shield, Wifi, WifiOff, AlertTriangle
+    Terminal, Shield, AlertTriangle
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -82,41 +82,24 @@ export default function CardReaderSetupPage() {
         {
             num: 2,
             icon: <Terminal className="w-5 h-5" />,
-            title: 'รัน install.bat',
-            desc: 'ติดตั้ง dependencies ของบริการอ่านบัตร',
+            title: 'ดับเบิลคลิก install.bat (ครั้งเดียว)',
+            desc: 'ติดตั้งและลงทะเบียนเป็น Windows Service — บริการจะเริ่มอัตโนมัติทุกครั้งที่เปิดเครื่อง',
             detail: (
                 <div className="space-y-2">
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                        เปิด Windows Explorer ไปที่โฟลเดอร์{' '}
-                        <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">card-reader-service</code>{' '}
-                        ในโปรเจค แล้วดับเบิลคลิก:
+                        แตกไฟล์ ZIP แล้วดับเบิลคลิก{' '}
+                        <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">install.bat</code>{' '}
+                        — ระบบจะขอสิทธิ์ Administrator ยืนยันเพื่อดำเนินการ
                     </p>
-                    <code className="block bg-slate-900 text-emerald-400 text-xs px-4 py-2 rounded-lg font-mono">
-                        install.bat
-                    </code>
+                    <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-2.5">
+                        <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">ไม่ต้องเปิดโปรแกรมค้างไว้</p>
+                        <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">
+                            บริการรันเบื้องหลังเป็น Windows Service — เริ่มอัตโนมัติกับ Windows ทุกครั้ง
+                        </p>
+                    </div>
                     <p className="text-xs text-slate-500">
                         ถ้าพบ error เกี่ยวกับ Build Tools ให้รันใน PowerShell (Admin):{' '}
                         <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">npm install --global windows-build-tools</code>
-                    </p>
-                </div>
-            ),
-        },
-        {
-            num: 3,
-            icon: <Monitor className="w-5 h-5" />,
-            title: 'เปิดบริการด้วย start.bat',
-            desc: 'รันบริการอ่านบัตรในพื้นหลัง',
-            detail: (
-                <div className="space-y-2">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                        ดับเบิลคลิก <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">start.bat</code>{' '}
-                        หน้าต่าง Command Prompt จะเปิดขึ้น ให้คงไว้ตลอดการใช้งาน
-                    </p>
-                    <code className="block bg-slate-900 text-emerald-400 text-xs px-4 py-2 rounded-lg font-mono">
-                        start.bat
-                    </code>
-                    <p className="text-xs text-slate-500">
-                        บริการจะรันที่ <code className="font-mono">http://localhost:38080</code>
                     </p>
                 </div>
             ),

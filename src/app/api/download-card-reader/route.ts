@@ -86,8 +86,10 @@ export async function GET() {
             'package.json',
             'server.js',
             'thai-id-reader.js',
+            'install-service.js',
+            'uninstall-service.js',
             'install.bat',
-            'start.bat',
+            'uninstall.bat',
             'README.md',
         ];
 

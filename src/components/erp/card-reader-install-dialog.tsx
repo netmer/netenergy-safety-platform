@@ -5,7 +5,7 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Download, Terminal, Monitor, CheckCircle2, Loader2, CreditCard, ExternalLink } from 'lucide-react';
+import { Download, Terminal, CheckCircle2, Loader2, CreditCard, ExternalLink } from 'lucide-react';
 
 interface CardReaderInstallDialogProps {
     open: boolean;
@@ -80,32 +80,26 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
 
                             {/* ขั้นตอนหลังดาวน์โหลด */}
                             <div className="space-y-3">
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ขั้นตอนการติดตั้ง</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ขั้นตอนการติดตั้ง (ครั้งเดียว)</p>
 
                                 {[
                                     {
                                         num: 1,
                                         Icon: Download,
                                         title: 'แตกไฟล์ ZIP',
-                                        desc: 'แตกไฟล์ card-reader-service.zip ที่ดาวน์โหลดมา',
+                                        desc: 'แตกไฟล์ card-reader-service.zip ที่ดาวน์โหลดมา วางไว้ที่ไหนก็ได้',
                                     },
                                     {
                                         num: 2,
                                         Icon: Terminal,
-                                        title: 'รัน install.bat',
-                                        desc: 'ดับเบิลคลิก install.bat เพื่อติดตั้ง (ต้องการ Node.js 18+)',
+                                        title: 'ดับเบิลคลิก install.bat',
+                                        desc: 'ระบบจะขอสิทธิ์ Admin — ติดตั้งและลงทะเบียนเป็น Windows Service อัตโนมัติ (ต้องการ Node.js 18+)',
                                     },
                                     {
                                         num: 3,
-                                        Icon: Monitor,
-                                        title: 'รัน start.bat',
-                                        desc: 'ดับเบิลคลิก start.bat ทุกครั้งก่อนใช้งาน คงหน้าต่างค้างไว้',
-                                    },
-                                    {
-                                        num: 4,
                                         Icon: CheckCircle2,
-                                        title: 'กลับมาลองใหม่',
-                                        desc: 'ปิด dialog นี้แล้วกดปุ่ม "อ่านบัตร ปชช." อีกครั้ง',
+                                        title: 'เสร็จสิ้น — ไม่ต้องเปิดโปรแกรมค้างไว้',
+                                        desc: 'บริการจะเริ่มทำงานอัตโนมัติทุกครั้งที่เปิดเครื่อง ปิด dialog แล้วกดอ่านบัตรได้เลย',
                                     },
                                 ].map((step) => (
                                     <div key={step.num} className="flex items-start gap-3">
