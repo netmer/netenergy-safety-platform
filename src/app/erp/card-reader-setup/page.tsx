@@ -82,48 +82,26 @@ export default function CardReaderSetupPage() {
         {
             num: 2,
             icon: <Terminal className="w-5 h-5" />,
-            title: 'ดับเบิลคลิก install.bat (ครั้งเดียว)',
-            desc: 'ติดตั้งและลงทะเบียนเป็น Windows Service — บริการจะเริ่มอัตโนมัติทุกครั้งที่เปิดเครื่อง',
+            title: 'ดับเบิลคลิก install.bat (ครั้งเดียว — ไม่ต้องการ Admin)',
+            desc: 'ลงทะเบียนให้บริการเริ่มอัตโนมัติทุกครั้งที่ login โดยไม่ต้องการสิทธิ์ Administrator',
             detail: (
                 <div className="space-y-2">
                     <p className="text-sm text-slate-600 dark:text-slate-400">
                         แตกไฟล์ ZIP แล้วดับเบิลคลิก{' '}
                         <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">install.bat</code>{' '}
-                        — ระบบจะขอสิทธิ์ Administrator ยืนยันเพื่อดำเนินการ
+                        — ไม่มี UAC popup ไม่ต้องการสิทธิ์ Administrator
                     </p>
                     <div className="bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg px-4 py-2.5">
                         <p className="text-xs font-bold text-emerald-700 dark:text-emerald-400">ไม่ต้องเปิดโปรแกรมค้างไว้</p>
                         <p className="text-xs text-emerald-600 dark:text-emerald-500 mt-0.5">
-                            บริการรันเบื้องหลังเป็น Windows Service — เริ่มอัตโนมัติกับ Windows ทุกครั้ง
+                            ใช้ Windows Task Scheduler — เริ่มอัตโนมัติทุกครั้งที่ login โดยไม่มี window ค้างไว้
                         </p>
                     </div>
-                    <p className="text-xs text-slate-500">
-                        ถ้าพบ error เกี่ยวกับ Build Tools ให้รันใน PowerShell (Admin):{' '}
-                        <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono">npm install --global windows-build-tools</code>
-                    </p>
                 </div>
             ),
         },
         {
-            num: 4,
-            icon: <Shield className="w-5 h-5" />,
-            title: 'ตรวจสอบ Smart Card Service ของ Windows',
-            desc: 'Windows ต้องเปิดใช้งาน Smart Card Service',
-            detail: (
-                <div className="space-y-2">
-                    <p className="text-sm text-slate-600 dark:text-slate-400">
-                        เปิด <code className="bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded text-xs font-mono">services.msc</code>{' '}
-                        แล้วหา &quot;Smart Card&quot; ตั้งค่าเป็น Automatic และ Start
-                    </p>
-                    <p className="text-xs text-slate-500">
-                        หรือรันใน Command Prompt (Admin):{' '}
-                        <code className="bg-slate-100 dark:bg-slate-700 px-1 rounded font-mono text-xs">sc start SCardSvr</code>
-                    </p>
-                </div>
-            ),
-        },
-        {
-            num: 5,
+            num: 3,
             icon: <CreditCard className="w-5 h-5" />,
             title: 'เสียบเครื่องอ่านบัตร USB',
             desc: 'รองรับเครื่องอ่านบัตร CCID มาตรฐานทุกรุ่น',

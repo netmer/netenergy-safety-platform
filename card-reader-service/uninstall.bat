@@ -1,28 +1,19 @@
 @echo off
 
-REM ── Auto-elevate to Administrator ──────────────────────────────────────────
-net session >nul 2>&1
-if %errorlevel% neq 0 (
-    powershell -Command "Start-Process -FilePath '%~f0' -Verb RunAs -Wait"
-    exit /b
-)
-
 echo.
 echo Removing Card Reader Service...
 echo.
 
+REM Stop the running process (find by port 38080)
 powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ^
-    "$n='CardReader-NETEnergy';" ^
-    "Stop-Service $n -Force -ErrorAction SilentlyContinue;" ^
-    "Start-Sleep -Seconds 3;" ^
-    "$r = sc.exe delete $n 2>&1;" ^
-    "if ($LASTEXITCODE -eq 0) { Write-Host '[OK] Service removed.' }" ^
-    "else { Write-Host '[INFO] Service not found or already removed.' }"
+    "$conn = Get-NetTCPConnection -LocalPort 38080 -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1;" ^
+    "if ($conn) { Stop-Process -Id $conn.OwningProcess -Force -ErrorAction SilentlyContinue; Write-Host '[OK] Service stopped.' }" ^
+    "else { Write-Host '[INFO] Service was not running.' }"
 
-if exist daemon (
-    rmdir /s /q daemon >nul 2>&1
-    echo [OK] Cleaned up service files.
-)
+REM Remove scheduled task
+powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ^
+    "Unregister-ScheduledTask -TaskName 'CardReader-NETEnergy' -Confirm:$false -ErrorAction SilentlyContinue;" ^
+    "if ((Get-ScheduledTask -TaskName 'CardReader-NETEnergy' -ErrorAction SilentlyContinue) -eq $null) { Write-Host '[OK] Auto-start task removed.' } else { Write-Host '[WARN] Could not remove task - remove manually from Task Scheduler.' }"
 
 echo.
 echo Done. Windows will no longer auto-start the card reader service.

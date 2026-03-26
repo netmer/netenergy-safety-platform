@@ -93,12 +93,12 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
                                 {(reason === 'outdated' ? [
                                     { num: 1, Icon: Terminal, title: 'รัน uninstall.bat (จาก ZIP เก่า)', desc: 'ถอนโปรแกรมเวอร์ชันเก่าออกก่อน' },
                                     { num: 2, Icon: Download, title: 'ดาวน์โหลด ZIP ใหม่ด้านบน', desc: 'ไฟล์ที่ดาวน์โหลดจากหน้านี้เป็นเวอร์ชันล่าสุดเสมอ' },
-                                    { num: 3, Icon: Terminal, title: 'รัน install.bat จาก ZIP ใหม่', desc: 'ดับเบิลคลิก install.bat ในโฟลเดอร์ที่แตกออกมาใหม่' },
+                                    { num: 3, Icon: Terminal, title: 'รัน install.bat จาก ZIP ใหม่', desc: 'ดับเบิลคลิก install.bat — ไม่ต้องการ Admin' },
                                     { num: 4, Icon: CheckCircle2, title: 'เสร็จสิ้น', desc: 'ปิด dialog แล้วกดอ่านบัตรได้เลย' },
                                 ] : [
                                     { num: 1, Icon: Download, title: 'แตกไฟล์ ZIP', desc: 'แตกไฟล์ card-reader-service.zip ที่ดาวน์โหลดมา วางไว้ที่ไหนก็ได้' },
-                                    { num: 2, Icon: Terminal, title: 'ดับเบิลคลิก install.bat', desc: 'ระบบจะขอสิทธิ์ Admin และติดตั้งอัตโนมัติ ต้องการ Node.js 18+' },
-                                    { num: 3, Icon: CheckCircle2, title: 'เสร็จสิ้น — ไม่ต้องเปิดโปรแกรมค้างไว้', desc: 'บริการจะเริ่มทำงานอัตโนมัติทุกครั้งที่เปิดเครื่อง ปิด dialog แล้วกดอ่านบัตรได้เลย' },
+                                    { num: 2, Icon: Terminal, title: 'ดับเบิลคลิก install.bat', desc: 'ไม่ต้องการสิทธิ์ Admin — ต้องการ Node.js 18+ เท่านั้น' },
+                                    { num: 3, Icon: CheckCircle2, title: 'เสร็จสิ้น — ไม่ต้องเปิดโปรแกรมค้างไว้', desc: 'บริการจะเริ่มอัตโนมัติทุกครั้งที่ login ปิด dialog แล้วกดอ่านบัตรได้เลย' },
                                 ]).map((step) => (
                                     <div key={step.num} className="flex items-start gap-3">
                                         <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
@@ -116,7 +116,7 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
                             </div>
 
                             <p className="text-[11px] text-slate-400 border-t pt-3">
-                                ต้องการ Node.js 18+{' '}
+                                ต้องการ Node.js 18+ (ไม่ต้องการ Admin){' '}
                                 <a
                                     href="https://nodejs.org/en/download"
                                     target="_blank"
