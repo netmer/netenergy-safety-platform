@@ -1,84 +1,76 @@
 @echo off
-chcp 65001 >nul
 echo.
-echo ══════════════════════════════════════════════════════
-echo    ติดตั้งบริการอ่านบัตรประชาชนไทย - NET Energy ERP
-echo ══════════════════════════════════════════════════════
+echo ======================================================
+echo   Card Reader Service - NET Energy ERP
+echo   Installing dependencies...
+echo ======================================================
 echo.
 
-REM ตรวจสอบ Node.js
-echo [1/4] ตรวจสอบ Node.js...
+REM Check Node.js
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] ไม่พบ Node.js กรุณาติดตั้ง Node.js เวอร์ชัน 18 ขึ้นไปก่อน
-    echo         ดาวน์โหลดที่: https://nodejs.org/en/download
+    echo [ERROR] Node.js not found.
+    echo Please install Node.js 18+ from: https://nodejs.org
     echo.
     pause
     exit /b 1
 )
+for /f "tokens=*" %%i in ('node --version') do set NODE_VER=%%i
+echo [OK] Node.js %NODE_VER%
 
-for /f "tokens=*" %%i in ('node --version') do set NODE_VERSION=%%i
-echo [OK] พบ Node.js %NODE_VERSION%
-
-REM ตรวจสอบ npm
-echo.
-echo [2/4] ตรวจสอบ npm...
+REM Check npm
 npm --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERROR] ไม่พบ npm
+    echo [ERROR] npm not found.
     pause
     exit /b 1
 )
-for /f "tokens=*" %%i in ('npm --version') do set NPM_VERSION=%%i
-echo [OK] พบ npm %NPM_VERSION%
+for /f "tokens=*" %%i in ('npm --version') do set NPM_VER=%%i
+echo [OK] npm %NPM_VER%
 
-REM ตรวจสอบ Windows Smart Card Service
+REM Enable Windows Smart Card Service
 echo.
-echo [3/4] ตรวจสอบ Windows Smart Card Service...
+echo [3/4] Checking Windows Smart Card Service...
 sc query SCardSvr | findstr "RUNNING" >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [WARN] Windows Smart Card Service ยังไม่ได้เปิดใช้งาน
-    echo        กำลังเปิดใช้งาน...
+    echo Enabling Smart Card Service...
     sc config SCardSvr start= auto >nul 2>&1
     net start SCardSvr >nul 2>&1
     if %errorlevel% neq 0 (
-        echo [WARN] ไม่สามารถเปิด Smart Card Service ได้โดยอัตโนมัติ
-        echo        กรุณาเปิดด้วยตนเอง: services.msc → Smart Card → Start
+        echo [WARN] Could not start Smart Card Service automatically.
+        echo Please open services.msc, find "Smart Card", and set it to Automatic + Start.
     ) else (
-        echo [OK] เปิด Smart Card Service สำเร็จ
+        echo [OK] Smart Card Service started.
     )
 ) else (
-    echo [OK] Smart Card Service กำลังทำงานอยู่
+    echo [OK] Smart Card Service is running.
 )
 
-REM ติดตั้ง dependencies
+REM Install npm dependencies
 echo.
-echo [4/4] ติดตั้ง dependencies (อาจใช้เวลาสักครู่)...
-echo       หมายเหตุ: pcsclite ต้องการ Visual C++ Build Tools
-echo       ถ้าติดตั้งไม่สำเร็จ ให้รัน: npm install --global windows-build-tools
+echo [4/4] Installing npm packages (this may take a moment)...
+echo Note: pcsclite requires Visual C++ Build Tools to compile.
+echo If this fails, run in Admin PowerShell: npm install --global windows-build-tools
 echo.
 npm install
 
 if %errorlevel% neq 0 (
     echo.
-    echo [ERROR] npm install ล้มเหลว
+    echo [ERROR] npm install failed.
     echo.
-    echo วิธีแก้ไข:
-    echo   1. เปิด PowerShell แบบ Administrator
-    echo   2. รันคำสั่ง: npm install --global windows-build-tools
-    echo   3. รันไฟล์ install.bat นี้อีกครั้ง
+    echo To fix:
+    echo   1. Open PowerShell as Administrator
+    echo   2. Run: npm install --global windows-build-tools
+    echo   3. Run install.bat again
     echo.
     pause
     exit /b 1
 )
 
 echo.
-echo ══════════════════════════════════════════════════════
-echo    ติดตั้งสำเร็จ!
-echo.
-echo    รัน start.bat เพื่อเริ่มบริการอ่านบัตร
-echo    หรือดับเบิลคลิก start.bat ในครั้งต่อๆ ไป
-echo ══════════════════════════════════════════════════════
+echo ======================================================
+echo   Installation complete!
+echo   Run start.bat to launch the card reader service.
+echo ======================================================
 echo.
 pause

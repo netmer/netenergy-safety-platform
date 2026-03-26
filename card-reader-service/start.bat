@@ -1,13 +1,14 @@
 @echo off
-chcp 65001 >nul
 echo.
-echo กำลังเริ่มบริการอ่านบัตรประชาชนไทย...
-echo กด Ctrl+C เพื่อหยุดบริการ
+echo ======================================================
+echo   Card Reader Service - NET Energy ERP
+echo   Running on http://localhost:38080
+echo   Press Ctrl+C to stop
+echo ======================================================
 echo.
 
-REM ตรวจสอบว่าติดตั้งแล้วหรือยัง
 if not exist "node_modules" (
-    echo [ERROR] ยังไม่ได้ติดตั้ง กรุณารัน install.bat ก่อน
+    echo [ERROR] Not installed yet. Please run install.bat first.
     pause
     exit /b 1
 )
