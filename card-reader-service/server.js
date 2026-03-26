@@ -10,24 +10,44 @@ const app = express();
 const PORT = 38080;
 const HOST = '127.0.0.1';
 
-// Chrome Private Network Access header (required for HTTPS pages calling http://localhost)
-// https://developer.chrome.com/blog/private-network-access-update/
+// Chrome Private Network Access (PNA): explicit OPTIONS preflight handler.
+// Must come BEFORE cors so we fully control the preflight response.
+// When an HTTPS page fetches http://localhost, Chrome sends OPTIONS with
+// "Access-Control-Request-Private-Network: true" and requires the server
+// to respond with "Access-Control-Allow-Private-Network: true".
+function isAllowedOrigin(origin) {
+    return !origin
+        || origin.startsWith('http://localhost')
+        || origin.startsWith('http://127.0.0.1')
+        || origin.startsWith('https://');
+}
+
+app.options('*', (req, res) => {
+    const origin = req.headers.origin || '';
+    if (isAllowedOrigin(origin) && origin) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    res.setHeader('Access-Control-Max-Age', '86400');
+    res.status(204).end();
+});
+
+// Add PNA header to all non-OPTIONS responses as well
 app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Private-Network', 'true');
     next();
 });
 
-// Service binds to 127.0.0.1 only — not internet-accessible.
-// Safe to allow any HTTPS origin so any deployed URL works without reconfiguring.
+// CORS for GET requests
 app.use(cors({
     origin: (origin, callback) => {
-        const ok = !origin                               // curl / Postman
-            || origin.startsWith('http://localhost')     // local dev
-            || origin.startsWith('http://127.0.0.1')
-            || origin.startsWith('https://');            // any HTTPS deployment URL
-        ok ? callback(null, true) : callback(new Error(`CORS: HTTP non-localhost blocked`));
+        isAllowedOrigin(origin)
+            ? callback(null, true)
+            : callback(new Error('CORS: HTTP non-localhost blocked'));
     },
-    methods: ['GET', 'OPTIONS'],
+    methods: ['GET'],
 }));
 
 app.use(express.json());
