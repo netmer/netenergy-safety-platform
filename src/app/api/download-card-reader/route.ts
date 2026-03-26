@@ -86,6 +86,7 @@ export async function GET() {
             'package.json',
             'server.js',
             'thai-id-reader.js',
+            'thai-card.ps1',
             'install-service.js',
             'uninstall-service.js',
             'install.bat',

@@ -40,14 +40,11 @@ if %errorlevel% neq 0 (
 
 REM ── Install npm packages ───────────────────────────────────────────────────
 echo.
-echo [Step 2/3] Installing packages...
+echo [Step 2/3] Installing Node.js packages (express, cors)...
 call npm install
 if %errorlevel% neq 0 (
     echo.
-    echo [ERROR] npm install failed.
-    echo If the error mentions "Visual C++ Build Tools", run this in Admin PowerShell:
-    echo     npm install --global windows-build-tools
-    echo Then run install.bat again.
+    echo [ERROR] npm install failed. See error above.
     echo.
     pause
     exit /b 1

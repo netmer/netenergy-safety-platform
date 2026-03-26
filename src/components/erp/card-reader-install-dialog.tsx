@@ -93,7 +93,7 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
                                         num: 2,
                                         Icon: Terminal,
                                         title: 'ดับเบิลคลิก install.bat',
-                                        desc: 'ระบบจะขอสิทธิ์ Admin — ติดตั้งและลงทะเบียนเป็น Windows Service อัตโนมัติ (ต้องการ Node.js 18+)',
+                                        desc: 'ระบบจะขอสิทธิ์ Admin และติดตั้งอัตโนมัติ ต้องการ Node.js 18+',
                                     },
                                     {
                                         num: 3,
