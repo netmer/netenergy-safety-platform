@@ -12,6 +12,9 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '10mb',
     },
+    outputFileTracingIncludes: {
+      '/api/download-card-reader': ['./card-reader-service/**/*'],
+    },
   },
   images: {
     remotePatterns: [

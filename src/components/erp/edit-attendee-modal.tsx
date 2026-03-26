@@ -8,13 +8,16 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useFirestore, updateDocumentNonBlocking } from '@/firebase';
 import { doc, getDoc, collection, query, where, getDocs, setDoc } from 'firebase/firestore';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import { getStorage, ref, uploadBytesResumable, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Search, CheckCircle2, AlertCircle, FileText, UploadCloud, Trash2, Calendar, Phone, Mail, GraduationCap } from 'lucide-react';
+import { Loader2, Search, CheckCircle2, AlertCircle, FileText, UploadCloud, Trash2, Calendar, Phone, Mail, GraduationCap, Camera } from 'lucide-react';
 import type { TrainingRecord, AttendeeData } from '@/lib/course-data';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { validateThaiID } from '@/lib/attendee-utils';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
+import { CardReaderButton } from '@/components/erp/card-reader-button';
+import { nanoid } from 'nanoid';
 
 interface EditAttendeeModalProps {
     isOpen: boolean;
@@ -42,6 +45,13 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
     const [documents, setDocuments] = useState<string[]>([]);
     const [uploadProgress, setUploadProgress] = useState<number | null>(null);
 
+    // Profile Picture
+    const profilePictureFileRef = useRef<HTMLInputElement>(null);
+    const [profilePictureUrl, setProfilePictureUrl] = useState('');
+    const [profilePictureFile, setProfilePictureFile] = useState<File | null>(null);
+    const [profilePicturePreview, setProfilePicturePreview] = useState<string | null>(null);
+    const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
+
     // Auto-fill state
     const [isCheckingId, setIsCheckingId] = useState(false);
 
@@ -56,6 +66,9 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
             setEducation((record as any).education || '');
             setDocuments((record as any).documents || []);
             setUploadProgress(null);
+            setProfilePictureUrl((record as any).profilePicture || '');
+            setProfilePictureFile(null);
+            setProfilePicturePreview(null);
         }
     }, [record, isOpen]);
 
@@ -75,6 +88,7 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                 if (data.fullName && !attendeeName) setAttendeeName(data.fullName);
                 if (data.dateOfBirth && !dateOfBirth) setDateOfBirth(data.dateOfBirth);
                 if (data.education && !education) setEducation(data.education);
+                if (data.profilePicture && !profilePictureUrl) setProfilePictureUrl(data.profilePicture);
                 if (data.documents?.length) {
                     const urls = data.documents.map(d => typeof d === 'string' ? d : d.url);
                     setDocuments(prev => [...new Set([...prev, ...urls])]);
@@ -139,11 +153,42 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
         setDocuments(newDocs);
     };
 
+    const handleProfilePictureSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        if (file.size > 5 * 1024 * 1024) {
+            toast({ variant: 'destructive', title: 'ไฟล์ใหญ่เกินไป', description: 'กรุณาเลือกรูปภาพขนาดไม่เกิน 5MB' });
+            return;
+        }
+        setProfilePictureFile(file);
+        const reader = new FileReader();
+        reader.onload = (ev) => setProfilePicturePreview(ev.target?.result as string);
+        reader.readAsDataURL(file);
+    };
+
     const handleSave = async () => {
         if (!firestore || !record) return;
         if (attendeeId && !validateThaiID(attendeeId)) {
             toast({ variant: 'destructive', title: 'เลขบัตรประชาชนไม่ถูกต้อง', description: 'กรุณากรอกรหัสประจำตัว 13 หลักให้ถูกต้องตามหลัก Check Digit' });
             return;
+        }
+
+        // อัปโหลดรูปโปรไฟล์ก่อน (ถ้ามีรูปใหม่)
+        let finalProfilePictureUrl = profilePictureUrl;
+        if (profilePictureFile && attendeeId && validateThaiID(attendeeId)) {
+            setIsUploadingPhoto(true);
+            try {
+                const storage = getStorage();
+                const fileRef = ref(storage, `attendees/${attendeeId}/profilePicture-${nanoid()}`);
+                const snap = await uploadBytes(fileRef, profilePictureFile);
+                finalProfilePictureUrl = await getDownloadURL(snap.ref);
+            } catch (err: any) {
+                toast({ variant: 'destructive', title: 'อัปโหลดรูปล้มเหลว', description: err.message });
+                setIsUploadingPhoto(false);
+                return;
+            } finally {
+                setIsUploadingPhoto(false);
+            }
         }
 
         startTransition(async () => {
@@ -157,7 +202,8 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                     emailAddress,
                     dateOfBirth,
                     education,
-                    documents
+                    documents,
+                    ...(finalProfilePictureUrl ? { profilePicture: finalProfilePictureUrl } : {}),
                 };
                 await updateDocumentNonBlocking(recordRef, updates);
 
@@ -170,7 +216,8 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                         email: emailAddress,
                         dateOfBirth,
                         education,
-                        documents
+                        documents,
+                        ...(finalProfilePictureUrl ? { profilePicture: finalProfilePictureUrl } : {}),
                     }, { merge: true });
                 }
 
@@ -208,10 +255,67 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                             <div className="p-6">
                                 {/* -- TAB: INFO -- */}
                                 <TabsContent value="info" className="m-0 space-y-5 focus-visible:outline-none focus-visible:ring-0">
+                                    {/* -- PROFILE PICTURE -- */}
+                                    <div className="flex items-center gap-4 pb-1">
+                                        <div
+                                            className="relative group cursor-pointer shrink-0"
+                                            onClick={() => profilePictureFileRef.current?.click()}
+                                            title="คลิกเพื่อเปลี่ยนรูปโปรไฟล์"
+                                        >
+                                            <Avatar className="w-20 h-20 ring-2 ring-slate-200 shadow-md">
+                                                <AvatarImage
+                                                    src={profilePicturePreview || profilePictureUrl || undefined}
+                                                    alt={attendeeName}
+                                                    className="object-cover"
+                                                />
+                                                <AvatarFallback className="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-2xl font-bold">
+                                                    {attendeeName ? attendeeName.charAt(0) : '?'}
+                                                </AvatarFallback>
+                                            </Avatar>
+                                            <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Camera className="w-6 h-6 text-white" />
+                                            </div>
+                                        </div>
+                                        <div className="flex-1 space-y-1">
+                                            <p className="font-bold text-sm text-slate-700 dark:text-slate-200 line-clamp-1">{attendeeName || 'ยังไม่ระบุชื่อ'}</p>
+                                            <button
+                                                type="button"
+                                                onClick={() => profilePictureFileRef.current?.click()}
+                                                className="text-xs text-indigo-600 hover:underline font-bold flex items-center gap-1 mt-0.5"
+                                            >
+                                                <Camera className="w-3 h-3" />
+                                                {profilePictureUrl || profilePicturePreview ? 'เปลี่ยนรูปภาพ' : 'เพิ่มรูปภาพ'}
+                                            </button>
+                                            {profilePictureFile && (
+                                                <p className="text-[10px] text-emerald-600 font-bold">รูปใหม่พร้อมบันทึก (กด &quot;บันทึก&quot; เพื่อยืนยัน)</p>
+                                            )}
+                                            {!attendeeId && profilePictureFile && (
+                                                <p className="text-[10px] text-amber-600 font-bold">ต้องกรอกเลขบัตรประชาชนก่อนอัปโหลดรูป</p>
+                                            )}
+                                        </div>
+                                        <input
+                                            ref={profilePictureFileRef}
+                                            type="file"
+                                            accept="image/*"
+                                            className="hidden"
+                                            onChange={handleProfilePictureSelect}
+                                        />
+                                    </div>
+
                                     <div className="space-y-2">
                                         <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">เลขบัตรประจำตัวประชาชน</Label>
+                                        <CardReaderButton
+                                            onCardRead={(data) => {
+                                                setAttendeeId(data.citizenId);
+                                                setAttendeeName(`${data.titleTH}${data.firstNameTH} ${data.lastNameTH}`.trim());
+                                                if (!dateOfBirth && data.dob) setDateOfBirth(data.dob);
+                                                toast({ title: 'อ่านบัตร ปชช. สำเร็จ', description: `โหลดข้อมูลของ ${data.titleTH}${data.firstNameTH} ${data.lastNameTH} แล้ว` });
+                                            }}
+                                            onError={(msg) => toast({ variant: 'destructive', title: 'อ่านบัตรไม่สำเร็จ', description: msg })}
+                                            className="mb-2"
+                                        />
                                         <div className="relative">
-                                            <Input 
+                                            <Input
                                                 value={attendeeId}
                                                 onChange={e => setAttendeeId(e.target.value.replace(/[^0-9]/g, '').slice(0, 13))}
                                                 placeholder="เลข 13 หลัก"
@@ -320,10 +424,10 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                 </div>
 
                 <div className="bg-white dark:bg-slate-900 border-t px-6 py-4 flex flex-col sm:flex-row gap-3 justify-end items-center">
-                    <Button variant="ghost" className="rounded-xl h-11 w-full sm:w-auto font-bold text-slate-500 hover:bg-slate-100" onClick={onClose} disabled={isPending || uploadProgress !== null}>ยกเลิก</Button>
-                    <Button onClick={handleSave} disabled={isPending || uploadProgress !== null || (attendeeId.length > 0 && !validateThaiID(attendeeId))} className="rounded-xl h-11 w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold min-w-[120px] shadow-md">
-                        {isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />}
-                        บันทึกประวัติทั้งหมด
+                    <Button variant="ghost" className="rounded-xl h-11 w-full sm:w-auto font-bold text-slate-500 hover:bg-slate-100" onClick={onClose} disabled={isPending || uploadProgress !== null || isUploadingPhoto}>ยกเลิก</Button>
+                    <Button onClick={handleSave} disabled={isPending || uploadProgress !== null || isUploadingPhoto || (attendeeId.length > 0 && !validateThaiID(attendeeId))} className="rounded-xl h-11 w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold min-w-[120px] shadow-md">
+                        {isPending || isUploadingPhoto ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />}
+                        {isUploadingPhoto ? 'กำลังอัปโหลดรูป...' : 'บันทึกประวัติทั้งหมด'}
                     </Button>
                 </div>
             </DialogContent>

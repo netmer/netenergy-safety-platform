@@ -10,6 +10,7 @@ import { doc, getDoc, collection, addDoc } from 'firebase/firestore';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, CheckCircle2, AlertCircle, UserPlus, Building, Phone, Mail } from 'lucide-react';
 import { validateThaiID } from '@/lib/attendee-utils';
+import { CardReaderButton } from '@/components/erp/card-reader-button';
 import type { TrainingSchedule } from '@/lib/course-data';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/context/auth-context';
@@ -167,6 +168,15 @@ export function AddWalkinAttendeeModal({ isOpen, onClose, schedule, onSuccess }:
                     {/* National ID */}
                     <div className="space-y-2">
                         <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">เลขบัตรประจำตัวประชาชน (ถ้ามี)</Label>
+                        <CardReaderButton
+                            onCardRead={(data) => {
+                                setAttendeeId(data.citizenId);
+                                setAttendeeName(`${data.titleTH}${data.firstNameTH} ${data.lastNameTH}`.trim());
+                                toast({ title: 'อ่านบัตร ปชช. สำเร็จ', description: `โหลดข้อมูลของ ${data.titleTH}${data.firstNameTH} ${data.lastNameTH} แล้ว` });
+                            }}
+                            onError={(msg) => toast({ variant: 'destructive', title: 'อ่านบัตรไม่สำเร็จ', description: msg })}
+                            className="mb-2"
+                        />
                         <div className="relative">
                             <Input
                                 value={attendeeId}

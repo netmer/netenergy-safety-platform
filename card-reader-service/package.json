@@ -1,0 +1,23 @@
+{
+  "name": "thai-id-card-reader-service",
+  "version": "1.0.0",
+  "description": "บริการอ่านบัตรประชาชนไทย สำหรับระบบ ERP NET Energy",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "build-exe": "pkg . --targets node18-win-x64 --output dist/card-reader-service.exe"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "pcsclite": "^1.0.1"
+  },
+  "devDependencies": {
+    "pkg": "^5.8.1"
+  },
+  "pkg": {
+    "assets": [
+      "node_modules/pcsclite/build/Release/*.node"
+    ]
+  }
+}

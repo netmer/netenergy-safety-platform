@@ -73,6 +73,12 @@ const erpNavGroups = [
       { href: '/erp/history', label: 'ประวัติการอบรม', Icon: History, roles: ['admin', 'training_team', 'inspection_team'] },
       { href: '/erp/certificate', label: 'พิมพ์ใบประกาศ', Icon: Award, roles: ['admin', 'training_team'] },
     ]
+  },
+  {
+    label: "System",
+    items: [
+      { href: '/erp/card-reader-setup', label: 'ตั้งค่าเครื่องอ่านบัตร', Icon: Shield, roles: ['admin', 'training_team'] },
+    ]
   }
 ];
 

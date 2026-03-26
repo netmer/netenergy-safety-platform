@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { collection, query, where, doc, orderBy, updateDoc, addDoc, writeBatch } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 import { CourseFilters } from '@/components/erp/course-filters';
@@ -34,6 +35,8 @@ import { useToast } from '@/hooks/use-toast';
 import { CaregiverSelect } from '@/components/erp/caregiver-select';
 import { EditAttendeeModal } from '@/components/erp/edit-attendee-modal';
 import { AddWalkinAttendeeModal } from '@/components/erp/add-walkin-attendee-modal';
+import { CardReaderInstallDialog } from '@/components/erp/card-reader-install-dialog';
+import { useCardReader } from '@/hooks/use-card-reader';
 import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, updateTrainingRecord, updateAttendeeOrder, type BulkImportRow } from '@/app/erp/attendees/actions';
 import { validateThaiID } from '@/lib/attendee-utils';
 import Link from 'next/link';
@@ -136,6 +139,8 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
 
     // Smart Card Reader State
     const [isReadingCard, setIsReadingCard] = useState<string | null>(null);
+    const [cardInstallDialogReason, setCardInstallDialogReason] = useState<'disconnected' | 'no_reader' | null>(null);
+    const { status: cardReaderStatus, readCard: readCardFromService } = useCardReader();
 
     // Certificate Preview State
     const [recordForCertificate, setRecordForCertificate] = useState<TrainingRecord | null>(null);
@@ -451,30 +456,25 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
     };
 
     const handleSmartCardRead = async (record: TrainingRecord) => {
-        toast({ title: 'กำลังเชื่อมต่อเครื่องอ่าน...', description: 'กรุณาเสียบบัตรประชาชน (Smart Card) ค้างไว้', duration: 4000 });
+        // ตรวจสอบสถานะก่อนอ่าน — ไม่มี mock data
+        if (cardReaderStatus === 'checking' || cardReaderStatus === 'disconnected') {
+            setCardInstallDialogReason('disconnected');
+            return;
+        }
+        if (cardReaderStatus === 'no_reader') {
+            setCardInstallDialogReason('no_reader');
+            return;
+        }
+
+        toast({ title: 'กรุณาเสียบบัตรประชาชน', description: 'วางบัตรบนเครื่องอ่านค้างไว้', duration: 5000 });
         setIsReadingCard(record.id);
         try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 2000);
-            const response = await fetch('http://localhost:8181/api/smartcard/read', { method: 'GET', signal: controller.signal });
-            clearTimeout(timeoutId);
-            if (response.ok) {
-                const data = await response.json();
-                await applySmartCardData(record, data);
-            } else {
-                throw new Error("Local smart card agent returned error");
-            }
-        } catch (e) {
-            setTimeout(() => {
-                const mockData = {
-                    citizenId: "1100000000001",
-                    titleTH: "นาย",
-                    firstNameTH: record.attendeeName.split(' ')[0] || "สมชาย",
-                    lastNameTH: record.attendeeName.split(' ')[1] || "รักดี",
-                    dob: "1985-12-10"
-                };
-                applySmartCardData(record, mockData);
-            }, 1000);
+            const data = await readCardFromService();
+            await applySmartCardData(record, data);
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'อ่านบัตรไม่สำเร็จ', description: e.message || 'กรุณาเสียบบัตรให้แน่นแล้วลองใหม่' });
+        } finally {
+            setIsReadingCard(null);
         }
     };
 
@@ -608,6 +608,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
     // ────────────────────────────────────────────────────────────────
 
     return (
+        <>
         <div className="space-y-6 pb-20">
             {/* Top Bar */}
             <div className="flex flex-col gap-4 text-left">
@@ -783,7 +784,13 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                     />
                                                 </TableCell>
                                                 <TableCell className="py-6 text-left">
-                                                    <div className="flex items-start gap-2">
+                                                    <div className="flex items-start gap-3">
+                                                        <Avatar className="w-9 h-9 shrink-0 ring-1 ring-slate-200 dark:ring-slate-700 shadow-sm mt-0.5">
+                                                            <AvatarImage src={(record as any).profilePicture || undefined} alt={record.attendeeName} className="object-cover" />
+                                                            <AvatarFallback className="bg-indigo-50 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 text-sm font-bold">
+                                                                {record.attendeeName.charAt(0)}
+                                                            </AvatarFallback>
+                                                        </Avatar>
                                                         <div>
                                                             <div className="font-bold text-slate-900 dark:text-white group-hover:text-primary transition-colors flex items-center gap-2">
                                                                 {record.attendeeName}
@@ -1097,5 +1104,14 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 );
             })()}
         </div>
+
+        {cardInstallDialogReason && (
+            <CardReaderInstallDialog
+                open
+                reason={cardInstallDialogReason}
+                onClose={() => setCardInstallDialogReason(null)}
+            />
+        )}
+        </>
     );
 }
