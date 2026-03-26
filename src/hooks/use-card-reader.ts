@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const SERVICE_URL = 'http://localhost:38080';
 const HEALTH_POLL_MS = 5000;
+const MIN_VERSION = '1.2.0'; // version ต่ำกว่านี้ให้แจ้งให้ reinstall
 
 export type CardReaderStatus = 'checking' | 'connected' | 'disconnected' | 'no_reader';
 export type CardReadState = 'idle' | 'reading' | 'success' | 'error';
@@ -22,10 +23,21 @@ export interface ThaiIdCardData {
     expireDate: string;
 }
 
+function versionAtLeast(v: string, min: string) {
+    const a = v.split('.').map(Number);
+    const b = min.split('.').map(Number);
+    for (let i = 0; i < 3; i++) {
+        if ((a[i] ?? 0) > (b[i] ?? 0)) return true;
+        if ((a[i] ?? 0) < (b[i] ?? 0)) return false;
+    }
+    return true;
+}
+
 export function useCardReader() {
     const [status, setStatus] = useState<CardReaderStatus>('checking');
     const [readState, setReadState] = useState<CardReadState>('idle');
     const [lastError, setLastError] = useState<string | null>(null);
+    const [serviceVersion, setServiceVersion] = useState<string | null>(null);
     const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -37,7 +49,13 @@ export function useCardReader() {
             });
             if (res.ok) {
                 const json = await res.json();
-                setStatus(json.status === 'no_reader' ? 'no_reader' : 'connected');
+                setServiceVersion(json.version ?? null);
+                if (json.version && !versionAtLeast(json.version, MIN_VERSION)) {
+                    // Service เวอร์ชันเก่า — แสดงสถานะ disconnected เพื่อให้แสดง install dialog
+                    setStatus('disconnected');
+                } else {
+                    setStatus(json.status === 'no_reader' ? 'no_reader' : 'connected');
+                }
             } else {
                 setStatus('disconnected');
             }
@@ -81,5 +99,6 @@ export function useCardReader() {
         }
     }, []);
 
-    return { status, readState, lastError, readCard, checkHealth };
+    const isOutdated = serviceVersion !== null && !versionAtLeast(serviceVersion, MIN_VERSION);
+    return { status, readState, lastError, serviceVersion, isOutdated, readCard, checkHealth };
 }

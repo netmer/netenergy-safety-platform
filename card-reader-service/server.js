@@ -79,7 +79,11 @@ app.listen(PORT, HOST, () => {
 // -- Auto-update ---------------------------------------------------------------
 // ดาวน์โหลดไฟล์ล่าสุดจาก web app อัตโนมัติ ไม่ต้องลงใหม่ด้วยตนเอง
 
-const UPDATE_URL = 'https://netenergy-safety-platform.web.app/api/card-reader-files';
+// ลอง URL ทั้งสองเผื่อหนึ่งใช้ไม่ได้
+const UPDATE_URLS = [
+    'https://netenergy-safety-platform--netenergy-safety-platform.asia-southeast1.hosted.app/api/card-reader-files',
+    'https://netenergy-safety-platform.web.app/api/card-reader-files',
+];
 const UPDATE_INTERVAL_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 async function checkForUpdates() {
@@ -87,11 +91,14 @@ async function checkForUpdates() {
         const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
         const localVersion = pkg.version;
 
-        const res = await fetch(UPDATE_URL, {
-            signal: AbortSignal.timeout(15000),
-            headers: { 'Cache-Control': 'no-cache' },
-        });
-        if (!res.ok) return;
+        let res = null;
+        for (const url of UPDATE_URLS) {
+            try {
+                res = await fetch(url, { signal: AbortSignal.timeout(10000), headers: { 'Cache-Control': 'no-cache' } });
+                if (res.ok) break;
+            } catch { res = null; }
+        }
+        if (!res || !res.ok) return;
 
         const { version: remoteVersion, files } = await res.json();
         if (!remoteVersion || remoteVersion === localVersion) return;

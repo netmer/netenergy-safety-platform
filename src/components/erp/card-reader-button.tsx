@@ -22,17 +22,20 @@ export function CardReaderButton({
     className,
     size = 'sm',
 }: CardReaderButtonProps) {
-    const { status, readState, readCard } = useCardReader();
-    const [dialogReason, setDialogReason] = useState<'disconnected' | 'no_reader' | null>(null);
+    const { status, readState, readCard, isOutdated } = useCardReader();
+    const [dialogReason, setDialogReason] = useState<'disconnected' | 'no_reader' | 'outdated' | null>(null);
 
     const handleClick = async () => {
-        // ถ้า service ยังตรวจสอบอยู่
+        if (isOutdated) {
+            setDialogReason('outdated');
+            return;
+        }
+
         if (status === 'checking') {
             setDialogReason('disconnected');
             return;
         }
 
-        // ถ้า service ไม่ได้เปิดทำงาน → แสดง dialog ดาวน์โหลด
         if (status === 'disconnected') {
             setDialogReason('disconnected');
             return;

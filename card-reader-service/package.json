@@ -1,6 +1,6 @@
 {
   "name": "thai-id-card-reader-service",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Thai ID Card Reader Service for NET Energy ERP",
   "main": "server.js",
   "scripts": {

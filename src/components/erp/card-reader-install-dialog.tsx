@@ -10,8 +10,8 @@ import { Download, Terminal, CheckCircle2, Loader2, CreditCard, ExternalLink } f
 interface CardReaderInstallDialogProps {
     open: boolean;
     onClose: () => void;
-    /** 'disconnected' = service ไม่ได้เปิด, 'no_reader' = ไม่มีเครื่องอ่านบัตร */
-    reason: 'disconnected' | 'no_reader';
+    /** 'disconnected' = service ไม่ได้เปิด, 'no_reader' = ไม่มีเครื่องอ่านบัตร, 'outdated' = version เก่า */
+    reason: 'disconnected' | 'no_reader' | 'outdated';
 }
 
 export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderInstallDialogProps) {
@@ -42,26 +42,32 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
             <DialogContent className="sm:max-w-[480px] rounded-3xl p-0 overflow-hidden">
                 {/* Header */}
-                <div className={`px-7 py-6 text-white ${reason === 'disconnected' ? 'bg-gradient-to-br from-slate-700 to-slate-900' : 'bg-gradient-to-br from-amber-500 to-orange-600'}`}>
+                <div className={`px-7 py-6 text-white ${
+                    reason === 'no_reader' ? 'bg-gradient-to-br from-amber-500 to-orange-600'
+                    : reason === 'outdated' ? 'bg-gradient-to-br from-orange-600 to-red-700'
+                    : 'bg-gradient-to-br from-slate-700 to-slate-900'
+                }`}>
                     <DialogHeader>
                         <div className="flex items-center gap-3 mb-1">
                             <div className="w-10 h-10 bg-white/20 rounded-2xl flex items-center justify-center shrink-0">
                                 <CreditCard className="w-5 h-5" />
                             </div>
                             <DialogTitle className="text-lg font-bold text-white">
-                                {reason === 'disconnected' ? 'ต้องติดตั้งโปรแกรมอ่านบัตร' : 'ไม่พบเครื่องอ่านบัตร USB'}
+                                {reason === 'disconnected' ? 'ต้องติดตั้งโปรแกรมอ่านบัตร'
+                                : reason === 'outdated'    ? 'โปรแกรมอ่านบัตรเวอร์ชันเก่า'
+                                :                           'ไม่พบเครื่องอ่านบัตร USB'}
                             </DialogTitle>
                         </div>
                         <DialogDescription className="text-white/80 text-sm mt-1">
-                            {reason === 'disconnected'
-                                ? 'ระบบอ่านบัตรประชาชนต้องใช้โปรแกรมช่วยที่รันบนเครื่องของคุณ กรุณาดาวน์โหลดและติดตั้งก่อนใช้งาน'
-                                : 'บริการอ่านบัตรพร้อมแล้ว แต่ยังไม่พบเครื่องอ่านบัตรที่เสียบอยู่'}
+                            {reason === 'disconnected' ? 'ระบบอ่านบัตรประชาชนต้องใช้โปรแกรมช่วยที่รันบนเครื่องของคุณ กรุณาดาวน์โหลดและติดตั้งก่อนใช้งาน'
+                            : reason === 'outdated'    ? 'โปรแกรมที่ติดตั้งอยู่เป็นเวอร์ชันเก่า ไม่รองรับ URL ปัจจุบัน กรุณาดาวน์โหลดและติดตั้งใหม่'
+                            :                           'บริการอ่านบัตรพร้อมแล้ว แต่ยังไม่พบเครื่องอ่านบัตรที่เสียบอยู่'}
                         </DialogDescription>
                     </DialogHeader>
                 </div>
 
                 <div className="p-6 space-y-5">
-                    {reason === 'disconnected' ? (
+                    {(reason === 'disconnected' || reason === 'outdated') ? (
                         <>
                             {/* ปุ่มดาวน์โหลด */}
                             <Button
@@ -80,28 +86,20 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
 
                             {/* ขั้นตอนหลังดาวน์โหลด */}
                             <div className="space-y-3">
-                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">ขั้นตอนการติดตั้ง (ครั้งเดียว)</p>
+                                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                    {reason === 'outdated' ? 'ขั้นตอนการอัปเดต' : 'ขั้นตอนการติดตั้ง (ครั้งเดียว)'}
+                                </p>
 
-                                {[
-                                    {
-                                        num: 1,
-                                        Icon: Download,
-                                        title: 'แตกไฟล์ ZIP',
-                                        desc: 'แตกไฟล์ card-reader-service.zip ที่ดาวน์โหลดมา วางไว้ที่ไหนก็ได้',
-                                    },
-                                    {
-                                        num: 2,
-                                        Icon: Terminal,
-                                        title: 'ดับเบิลคลิก install.bat',
-                                        desc: 'ระบบจะขอสิทธิ์ Admin และติดตั้งอัตโนมัติ ต้องการ Node.js 18+',
-                                    },
-                                    {
-                                        num: 3,
-                                        Icon: CheckCircle2,
-                                        title: 'เสร็จสิ้น — ไม่ต้องเปิดโปรแกรมค้างไว้',
-                                        desc: 'บริการจะเริ่มทำงานอัตโนมัติทุกครั้งที่เปิดเครื่อง ปิด dialog แล้วกดอ่านบัตรได้เลย',
-                                    },
-                                ].map((step) => (
+                                {(reason === 'outdated' ? [
+                                    { num: 1, Icon: Terminal, title: 'รัน uninstall.bat (จาก ZIP เก่า)', desc: 'ถอนโปรแกรมเวอร์ชันเก่าออกก่อน' },
+                                    { num: 2, Icon: Download, title: 'ดาวน์โหลด ZIP ใหม่ด้านบน', desc: 'ไฟล์ที่ดาวน์โหลดจากหน้านี้เป็นเวอร์ชันล่าสุดเสมอ' },
+                                    { num: 3, Icon: Terminal, title: 'รัน install.bat จาก ZIP ใหม่', desc: 'ดับเบิลคลิก install.bat ในโฟลเดอร์ที่แตกออกมาใหม่' },
+                                    { num: 4, Icon: CheckCircle2, title: 'เสร็จสิ้น', desc: 'ปิด dialog แล้วกดอ่านบัตรได้เลย' },
+                                ] : [
+                                    { num: 1, Icon: Download, title: 'แตกไฟล์ ZIP', desc: 'แตกไฟล์ card-reader-service.zip ที่ดาวน์โหลดมา วางไว้ที่ไหนก็ได้' },
+                                    { num: 2, Icon: Terminal, title: 'ดับเบิลคลิก install.bat', desc: 'ระบบจะขอสิทธิ์ Admin และติดตั้งอัตโนมัติ ต้องการ Node.js 18+' },
+                                    { num: 3, Icon: CheckCircle2, title: 'เสร็จสิ้น — ไม่ต้องเปิดโปรแกรมค้างไว้', desc: 'บริการจะเริ่มทำงานอัตโนมัติทุกครั้งที่เปิดเครื่อง ปิด dialog แล้วกดอ่านบัตรได้เลย' },
+                                ]).map((step) => (
                                     <div key={step.num} className="flex items-start gap-3">
                                         <div className="w-7 h-7 rounded-full bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
                                             {step.num}
