@@ -8,19 +8,17 @@ if %errorlevel% neq 0 (
 )
 
 echo.
-echo Stopping Card Reader Service...
-sc stop CardReader-NETEnergy >nul 2>&1
-timeout /t 2 /nobreak >nul
-
 echo Removing Card Reader Service...
-sc delete CardReader-NETEnergy >nul 2>&1
-if %errorlevel% equ 0 (
-    echo [OK] Service removed.
-) else (
-    echo [INFO] Service not found or already removed.
-)
+echo.
 
-REM ── Clean up daemon folder left by node-windows ────────────────────────────
+powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command ^
+    "$n='CardReader-NETEnergy';" ^
+    "Stop-Service $n -Force -ErrorAction SilentlyContinue;" ^
+    "Start-Sleep -Seconds 3;" ^
+    "$r = sc.exe delete $n 2>&1;" ^
+    "if ($LASTEXITCODE -eq 0) { Write-Host '[OK] Service removed.' }" ^
+    "else { Write-Host '[INFO] Service not found or already removed.' }"
+
 if exist daemon (
     rmdir /s /q daemon >nul 2>&1
     echo [OK] Cleaned up service files.

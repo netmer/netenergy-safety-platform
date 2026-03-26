@@ -10,14 +10,6 @@ const app = express();
 const PORT = 38080;
 const HOST = '127.0.0.1';
 
-// อนุญาต CORS จาก localhost (dev) และ production domain
-const ALLOWED_ORIGINS = [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'https://netenergy-safety-platform.web.app',
-    'https://netenergy-safety-platform.firebaseapp.com',
-];
-
 // Chrome Private Network Access header (required for HTTPS pages calling http://localhost)
 // https://developer.chrome.com/blog/private-network-access-update/
 app.use((req, res, next) => {
@@ -25,13 +17,15 @@ app.use((req, res, next) => {
     next();
 });
 
+// Service binds to 127.0.0.1 only — not internet-accessible.
+// Safe to allow any HTTPS origin so any deployed URL works without reconfiguring.
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || ALLOWED_ORIGINS.some(o => origin.startsWith(o))) {
-            callback(null, true);
-        } else {
-            callback(new Error(`CORS: origin ${origin} not allowed`));
-        }
+        const ok = !origin                               // curl / Postman
+            || origin.startsWith('http://localhost')     // local dev
+            || origin.startsWith('http://127.0.0.1')
+            || origin.startsWith('https://');            // any HTTPS deployment URL
+        ok ? callback(null, true) : callback(new Error(`CORS: HTTP non-localhost blocked`));
     },
     methods: ['GET', 'OPTIONS'],
 }));
