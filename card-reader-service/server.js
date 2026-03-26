@@ -16,6 +16,13 @@ const ALLOWED_ORIGINS = [
     'https://netenergy-safety-platform.firebaseapp.com',
 ];
 
+// Chrome Private Network Access — ต้องใส่ header นี้เพื่อให้ HTTPS page เรียก localhost HTTP ได้
+// https://developer.chrome.com/blog/private-network-access-update/
+app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
+    next();
+});
+
 app.use(cors({
     origin: (origin, callback) => {
         // อนุญาต requests ที่ไม่มี origin (เช่น curl, Postman) และ origins ที่อยู่ใน whitelist
@@ -25,7 +32,7 @@ app.use(cors({
             callback(new Error(`CORS: origin ${origin} ไม่ได้รับอนุญาต`));
         }
     },
-    methods: ['GET'],
+    methods: ['GET', 'OPTIONS'],
 }));
 
 app.use(express.json());
