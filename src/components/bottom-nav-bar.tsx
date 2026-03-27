@@ -19,8 +19,8 @@ export function BottomNavBar() {
     setIsOpen(false);
   }, [pathname]);
   
-  // Hide on admin/erp pages
-  if (pathname.startsWith('/admin') || pathname.startsWith('/erp')) {
+  // Hide on admin/erp/exam pages
+  if (pathname.startsWith('/admin') || pathname.startsWith('/erp') || pathname.startsWith('/exam') || pathname.startsWith('/eval')) {
     return null;
   }
 

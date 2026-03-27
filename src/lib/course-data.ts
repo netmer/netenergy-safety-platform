@@ -31,6 +31,8 @@ export type Course = {
   certificateTemplateId?: string;
   validityYears?: number; // New field for certificate validity in years
   deliverables?: DeliverableConfig[]; // Post-training items to ship
+  examTemplateId?: string;       // Linked exam template for this course
+  evaluationTemplateId?: string; // Linked evaluation template for this course
 };
 
 export type CourseType = {
@@ -334,4 +336,154 @@ export type AppNotification = {
     read: boolean;
     forRole: AppUser['role'] | 'all'; // Target audience
     createdAt: string; // ISO String
+};
+
+// ─── Exam System ──────────────────────────────────────────────────────────────
+
+export type ExamType = 'pretest' | 'posttest';
+
+export type ExamQuestionOption = {
+    id: string;
+    label: string; // e.g. "ก.", "ข.", "ค.", "ง."
+    text: string;
+};
+
+export type ExamQuestion = {
+    id: string;
+    text: string;
+    options: ExamQuestionOption[];
+    correctOptionId: string;
+    points: number; // default 1
+    imageUrl?: string;
+};
+
+export type AdditionalSectionFieldOption = {
+    id: string;
+    label: string;
+    value: string;
+};
+
+export type AdditionalSectionField = {
+    id: string;
+    label: string;
+    type: 'text' | 'select' | 'radio' | 'number' | 'textarea';
+    required: boolean;
+    options?: AdditionalSectionFieldOption[];
+    placeholder?: string;
+};
+
+export type AdditionalSection = {
+    id: string;
+    placement: 'before' | 'after'; // before questions = personal info; after = survey
+    title: string;
+    fields: AdditionalSectionField[];
+};
+
+export type ExamConfig = {
+    type: ExamType;
+    title: string;
+    instructions?: string;
+    timeLimitMinutes?: number; // undefined = no time limit
+    passingScore?: number; // 0-100 percentage; undefined = no pass/fail
+    shuffleQuestions: boolean;
+    showResultAfterSubmit?: boolean; // undefined/true = show score; false = hide score from trainee
+    questions: ExamQuestion[];
+    additionalSections?: AdditionalSection[];
+};
+
+// Collection: examTemplates/{examTemplateId}
+export type ExamTemplate = {
+    id: string;
+    name: string;
+    courseId: string;
+    courseTitle: string; // denormalized
+    examMode: 'none' | 'pretest_only' | 'posttest_only' | 'both';
+    pretest?: ExamConfig;
+    posttest?: ExamConfig;
+    createdAt: string; // ISO string
+    updatedAt: string; // ISO string
+    createdBy: string; // user displayName
+};
+
+export type ExamAnswer = {
+    questionId: string;
+    selectedOptionId: string | null; // null = skipped
+    isCorrect: boolean;
+};
+
+export type AdditionalSectionResponse = {
+    sectionId: string;
+    responses: Record<string, string>; // fieldId -> value
+};
+
+// Collection: examSessions/{examSessionId}
+export type ExamSession = {
+    id: string;
+    examTemplateId: string;
+    scheduleId: string;
+    courseId: string;
+    trainingRecordId: string;
+    attendeeName: string;
+    seatNumber: string;
+    examType: ExamType;
+    startedAt: string; // ISO string
+    submittedAt: string; // ISO string
+    answers: ExamAnswer[];
+    rawScore: number;
+    totalPoints: number;
+    scorePercent: number; // 0-100
+    passed: boolean | null; // null when no passingScore configured
+    additionalResponses?: AdditionalSectionResponse[];
+    timeTakenSeconds?: number;
+    superseded?: boolean;      // true = staff reset this session; trainee may retake
+    supersededAt?: string;     // ISO string when reset occurred
+    supersededBy?: string;     // uid of staff who reset
+};
+
+// ─── Evaluation System (แบบประเมิน) ──────────────────────────────────────────
+
+export type EvaluationItem = {
+    id: string;
+    label: string; // e.g. "ความเหมาะสมของเนื้อหาหลักสูตร"
+};
+
+export type EvaluationSection = {
+    id: string;
+    title: string; // e.g. "ด้านเนื้อหาหลักสูตร"
+    items: EvaluationItem[];
+};
+
+export type EvaluationOpenQuestion = {
+    id: string;
+    label: string; // e.g. "ข้อเสนอแนะเพิ่มเติม"
+    required: boolean;
+};
+
+// Collection: evaluationTemplates/{templateId}
+export type EvaluationTemplate = {
+    id: string;
+    name: string;
+    courseId: string;
+    courseTitle: string;
+    sections: EvaluationSection[];
+    openQuestions: EvaluationOpenQuestion[];
+    createdAt: string;
+    updatedAt: string;
+    createdBy: string;
+};
+
+// Collection: evaluationSessions/{sessionId}
+export type EvaluationSession = {
+    id: string;
+    templateId: string;
+    scheduleId: string;
+    courseId: string;
+    trainingRecordId?: string;
+    attendeeName?: string;
+    seatNumber?: string;
+    submittedAt: string;
+    ratings: Record<string, number>;         // itemId → 1-10
+    openAnswers: Record<string, string>;      // questionId → answer text
+    averageScore: number;                     // overall average across all items
+    sectionAverages: Record<string, number>;  // sectionId → average
 };

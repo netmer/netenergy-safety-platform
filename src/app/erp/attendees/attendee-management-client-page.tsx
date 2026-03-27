@@ -4,7 +4,7 @@ import React, { useState, useMemo, useTransition, useEffect, useCallback } from 
 import { DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, useSortable, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { TrainingSchedule, Course, CourseCategory, AttendeeData, TrainingRecord, RegistrationFormField, AttendeeStatus, AttendeeAttendanceStatus, CertificateTemplate as TemplateType } from '@/lib/course-data';
+import type { TrainingSchedule, Course, CourseCategory, AttendeeData, TrainingRecord, RegistrationFormField, AttendeeStatus, AttendeeAttendanceStatus, CertificateTemplate as TemplateType, ExamSession, ExamTemplate } from '@/lib/course-data';
 import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -23,7 +24,7 @@ import {
     CalendarClock, Loader2, PlusCircle, Building, Users, Download,
     History, Edit3, UserCheck, Calendar, User, Printer, CreditCard,
     CheckCircle2, TrendingUp, UserPlus, ChevronDown, Upload, AlertCircle,
-    Award, ExternalLink, ArrowLeft, GripVertical
+    Award, ExternalLink, ArrowLeft, GripVertical, RotateCcw
 } from 'lucide-react';
 import { useAuth } from '@/context/auth-context';
 import { useFirestore, useCollection, useMemoFirebase, updateDocumentNonBlocking } from '@/firebase';
@@ -37,7 +38,9 @@ import { EditAttendeeModal } from '@/components/erp/edit-attendee-modal';
 import { AddWalkinAttendeeModal } from '@/components/erp/add-walkin-attendee-modal';
 import { CardReaderInstallDialog } from '@/components/erp/card-reader-install-dialog';
 import { useCardReader } from '@/hooks/use-card-reader';
-import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, updateTrainingRecord, updateAttendeeOrder, type BulkImportRow } from '@/app/erp/attendees/actions';
+import { ExamQrButton } from '@/components/erp/exam-qr-button';
+import { EvalQrButton } from '@/components/erp/eval-qr-button';
+import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, updateTrainingRecord, updateAttendeeOrder, resetExamSession, type BulkImportRow } from '@/app/erp/attendees/actions';
 import { validateThaiID } from '@/lib/attendee-utils';
 import Link from 'next/link';
 import { CertificateTemplate } from '@/app/erp/certificate/certificate-template';
@@ -171,6 +174,35 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
     const { data: historyData } = useCollection<any>(historyQuery);
     const auditHistory = historyData || [];
 
+    const examSessionsQuery = useMemoFirebase(() => {
+        if (scheduleFilter === 'all' || !firestore) return null;
+        return query(collection(firestore, 'examSessions'), where('scheduleId', '==', scheduleFilter));
+    }, [scheduleFilter, firestore]);
+    const { data: examSessionsData } = useCollection<ExamSession>(examSessionsQuery);
+    const examSessions = examSessionsData || [];
+
+    // Map: trainingRecordId -> { pretest?: ExamSession, posttest?: ExamSession }
+    const examSessionMap = useMemo(() => {
+        const map = new Map<string, { pretest?: ExamSession; posttest?: ExamSession }>();
+        examSessions
+            .filter(s => !s.superseded) // Only show active (non-reset) sessions
+            .forEach(s => {
+                const entry = map.get(s.trainingRecordId) ?? {};
+                if (s.examType === 'pretest') entry.pretest = s;
+                else entry.posttest = s;
+                map.set(s.trainingRecordId, entry);
+            });
+        return map;
+    }, [examSessions]);
+
+    // Current course's exam template (for QR button)
+    const [examTemplate, setExamTemplate] = useState<ExamTemplate | null | undefined>(undefined);
+
+    // Exam drill-down modal
+    const [examDrillRecord, setExamDrillRecord] = useState<{ record: TrainingRecord; sessions: { pretest?: ExamSession; posttest?: ExamSession } } | null>(null);
+    const [resetConfirm, setResetConfirm] = useState<{ session: ExamSession; trainingRecordId: string } | null>(null);
+    const [isResetting, startResetTransition] = useTransition();
+
     const filteredRecords = useMemo(() => {
         if (!searchQuery) return records;
         const searchLower = searchQuery.toLowerCase();
@@ -200,6 +232,19 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
     }, [scheduleFilter, schedules, courses]);
 
     const coursesMap = useMemo(() => new Map(courses.map(c => [c.id, c])), [courses]);
+
+    // Load exam template for selected schedule's course
+    useEffect(() => {
+        if (!selectedScheduleDetails) { setExamTemplate(null); return; }
+        const course = courses.find(c => c.id === (selectedScheduleDetails as any).courseId);
+        if (!course?.examTemplateId) { setExamTemplate(null); return; }
+        if (!firestore) return;
+        import('firebase/firestore').then(({ doc, getDoc }) => {
+            getDoc(doc(firestore, 'examTemplates', course.examTemplateId!)).then(snap => {
+                setExamTemplate(snap.exists() ? ({ id: snap.id, ...snap.data() } as ExamTemplate) : null);
+            });
+        });
+    }, [selectedScheduleDetails, courses, firestore]);
     const schedulesMap = useMemo(() => new Map(schedules.map(s => [s.id, s])), [schedules]);
     const templatesMap = useMemo(() => new Map(templates.map(t => [t.id, t])), [templates]);
 
@@ -673,6 +718,14 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                 </div>
                             </div>
                             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0">
+                                {scheduleFilter !== 'all' && examTemplate && (
+                                    <ExamQrButton scheduleId={scheduleFilter} template={examTemplate} />
+                                )}
+                                {scheduleFilter !== 'all' && (() => {
+                                    const sch = schedules.find(s => s.id === scheduleFilter);
+                                    const course = sch ? courses.find(c => c.id === sch.courseId) : null;
+                                    return course?.evaluationTemplateId ? <EvalQrButton scheduleId={scheduleFilter} /> : null;
+                                })()}
                                 {scheduleFilter !== 'all' && (
                                     <Button variant="outline" className="rounded-xl font-bold shadow-sm h-11 border-amber-200 text-amber-700 hover:bg-amber-50" onClick={() => setIsBulkPrintMode(true)} disabled={recordsToPrint.length === 0}>
                                         <Printer className="w-4 h-4 mr-2" />
@@ -863,25 +916,65 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                     </div>
                                                 </TableCell>
                                                 <TableCell className="text-center">
-                                                    <div className="flex items-center justify-center gap-2">
-                                                        <div className="flex flex-col gap-1 items-center">
-                                                            <Input
-                                                                defaultValue={record.preTestScore || ''}
-                                                                onBlur={e => handleUpdateInline(record.id, 'preTestScore', e.target.value, record.attendeeName)}
-                                                                className="h-9 w-16 text-center rounded-xl font-bold bg-slate-50 border-slate-200 focus:bg-white"
-                                                                placeholder="Pre"
-                                                            />
-                                                        </div>
-                                                        <span className="text-slate-300 font-light">/</span>
-                                                        <div className="flex flex-col gap-1 items-center">
-                                                            <Input
-                                                                defaultValue={record.postTestScore || ''}
-                                                                onBlur={e => handleUpdateInline(record.id, 'postTestScore', e.target.value, record.attendeeName)}
-                                                                className="h-9 w-16 text-center rounded-xl font-bold bg-slate-50 border-slate-200 focus:bg-white text-emerald-600"
-                                                                placeholder="Post"
-                                                            />
-                                                        </div>
-                                                    </div>
+                                                    {(() => {
+                                                        const ses = examSessionMap.get(record.id);
+                                                        const hasSessions = ses?.pretest || ses?.posttest;
+                                                        if (hasSessions) {
+                                                            return (
+                                                                <button
+                                                                    onClick={() => setExamDrillRecord({ record, sessions: ses! })}
+                                                                    className="flex items-center justify-center gap-1.5 group"
+                                                                    title="คลิกเพื่อดูรายละเอียดคำตอบ"
+                                                                >
+                                                                    {ses?.pretest ? (
+                                                                        <span className={cn('px-2 py-0.5 rounded-lg text-xs font-bold border', ses.pretest.passed === false ? 'bg-red-50 text-red-700 border-red-200' : ses.pretest.passed === true ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-700 border-slate-200')}>
+                                                                            {ses.pretest.rawScore}/{ses.pretest.totalPoints}
+                                                                        </span>
+                                                                    ) : record.preTestScore ? (
+                                                                        <Input
+                                                                            defaultValue={record.preTestScore}
+                                                                            onBlur={e => handleUpdateInline(record.id, 'preTestScore', e.target.value, record.attendeeName)}
+                                                                            className="h-7 w-14 text-center rounded-lg text-xs font-bold bg-slate-50 border-slate-200"
+                                                                            placeholder="Pre"
+                                                                            onClick={e => e.stopPropagation()}
+                                                                        />
+                                                                    ) : <span className="text-muted-foreground text-xs">–</span>}
+                                                                    <span className="text-slate-300 text-xs">/</span>
+                                                                    {ses?.posttest ? (
+                                                                        <span className={cn('px-2 py-0.5 rounded-lg text-xs font-bold border', ses.posttest.passed === false ? 'bg-red-50 text-red-700 border-red-200' : ses.posttest.passed === true ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-blue-50 text-blue-700 border-blue-200')}>
+                                                                            {ses.posttest.rawScore}/{ses.posttest.totalPoints}
+                                                                        </span>
+                                                                    ) : record.postTestScore ? (
+                                                                        <Input
+                                                                            defaultValue={record.postTestScore}
+                                                                            onBlur={e => handleUpdateInline(record.id, 'postTestScore', e.target.value, record.attendeeName)}
+                                                                            className="h-7 w-14 text-center rounded-lg text-xs font-bold bg-slate-50 border-slate-200 text-emerald-600"
+                                                                            placeholder="Post"
+                                                                            onClick={e => e.stopPropagation()}
+                                                                        />
+                                                                    ) : <span className="text-muted-foreground text-xs">–</span>}
+                                                                </button>
+                                                            );
+                                                        }
+                                                        // No sessions – show manual inputs
+                                                        return (
+                                                            <div className="flex items-center justify-center gap-2">
+                                                                <Input
+                                                                    defaultValue={record.preTestScore || ''}
+                                                                    onBlur={e => handleUpdateInline(record.id, 'preTestScore', e.target.value, record.attendeeName)}
+                                                                    className="h-9 w-16 text-center rounded-xl font-bold bg-slate-50 border-slate-200 focus:bg-white"
+                                                                    placeholder="Pre"
+                                                                />
+                                                                <span className="text-slate-300 font-light">/</span>
+                                                                <Input
+                                                                    defaultValue={record.postTestScore || ''}
+                                                                    onBlur={e => handleUpdateInline(record.id, 'postTestScore', e.target.value, record.attendeeName)}
+                                                                    className="h-9 w-16 text-center rounded-xl font-bold bg-slate-50 border-slate-200 focus:bg-white text-emerald-600"
+                                                                    placeholder="Post"
+                                                                />
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </TableCell>
                                                 <TableCell className="text-right pr-4">
                                                     <div className="flex items-center justify-end gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
@@ -989,6 +1082,157 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 schedule={selectedScheduleDetails as any}
                 onSuccess={() => setIsWalkinModalOpen(false)}
             />
+
+            {/* Exam Drill-down Dialog */}
+            <Dialog open={!!examDrillRecord} onOpenChange={open => !open && setExamDrillRecord(null)}>
+                <DialogContent className="rounded-3xl max-w-lg max-h-[80vh] overflow-y-auto">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <TrendingUp className="w-5 h-5 text-blue-600" />
+                            ผลการทดสอบ — {examDrillRecord?.record.attendeeName}
+                        </DialogTitle>
+                    </DialogHeader>
+                    {examDrillRecord && (() => {
+                        const { sessions } = examDrillRecord;
+                        const renderSession = (ses: ExamSession | undefined, label: string) => {
+                            if (!ses) return null;
+                            const config = ses.examType === 'pretest' ? examTemplate?.pretest : examTemplate?.posttest;
+                            const qMap = new Map(config?.questions.map(q => [q.id, q]) ?? []);
+                            return (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <p className="font-semibold text-sm">{label}</p>
+                                        <div className="flex items-center gap-2">
+                                            <span className={cn('text-lg font-bold', ses.passed === false ? 'text-red-500' : ses.passed === true ? 'text-emerald-600' : 'text-blue-600')}>
+                                                {ses.rawScore}/{ses.totalPoints}
+                                            </span>
+                                            <span className="text-sm text-muted-foreground">({ses.scorePercent}%)</span>
+                                            {ses.passed !== null && (
+                                                <span className={cn('text-xs px-2 py-0.5 rounded-full font-bold', ses.passed ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700')}>
+                                                    {ses.passed ? 'ผ่าน' : 'ไม่ผ่าน'}
+                                                </span>
+                                            )}
+                                            <Button
+                                                variant="outline" size="sm"
+                                                className="h-7 px-2 rounded-lg text-xs gap-1 text-amber-600 border-amber-200 bg-amber-50 hover:bg-amber-100"
+                                                onClick={() => setResetConfirm({ session: ses, trainingRecordId: examDrillRecord!.record.id })}
+                                                title="รีเซ็ตให้สอบใหม่"
+                                            >
+                                                <RotateCcw className="w-3 h-3" /> รีเซ็ต
+                                            </Button>
+                                        </div>
+                                    </div>
+                                    {/* Additional responses (before sections) */}
+                                    {ses.additionalResponses && ses.additionalResponses.length > 0 && config?.additionalSections?.filter(s => s.placement === 'before').map(sec => {
+                                        const resp = ses.additionalResponses!.find(r => r.sectionId === sec.id);
+                                        if (!resp) return null;
+                                        return (
+                                            <div key={sec.id} className="bg-muted/40 rounded-xl p-3 space-y-1">
+                                                <p className="text-xs font-semibold text-muted-foreground">{sec.title}</p>
+                                                <div className="grid grid-cols-2 gap-1">
+                                                    {sec.fields.map(f => (
+                                                        <div key={f.id}>
+                                                            <span className="text-xs text-muted-foreground">{f.label}: </span>
+                                                            <span className="text-xs font-medium">{resp.responses[f.id] ?? '–'}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    {/* Answers */}
+                                    <div className="space-y-1.5">
+                                        {ses.answers.map((ans, i) => {
+                                            const q = qMap.get(ans.questionId);
+                                            if (!q) return null;
+                                            const selOpt = q.options.find(o => o.id === ans.selectedOptionId);
+                                            const corOpt = q.options.find(o => o.id === q.correctOptionId);
+                                            return (
+                                                <div key={ans.questionId} className={cn('p-2.5 rounded-xl border text-xs', ans.isCorrect ? 'border-emerald-200 bg-emerald-50 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-red-200 bg-red-50 dark:border-red-900 dark:bg-red-950/20')}>
+                                                    <p className="font-medium mb-1">{i + 1}. {q.text}</p>
+                                                    <p>
+                                                        <span className="text-muted-foreground">ตอบ: </span>
+                                                        <span className={ans.isCorrect ? 'text-emerald-700 font-semibold' : 'text-red-600 font-semibold'}>
+                                                            {selOpt ? `${selOpt.label} ${selOpt.text}` : '(ไม่ได้ตอบ)'}
+                                                        </span>
+                                                    </p>
+                                                    {!ans.isCorrect && <p className="text-emerald-700"><span className="text-muted-foreground">เฉลย: </span>{corOpt ? `${corOpt.label} ${corOpt.text}` : '–'}</p>}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    {/* After sections */}
+                                    {ses.additionalResponses && ses.additionalResponses.length > 0 && config?.additionalSections?.filter(s => s.placement === 'after').map(sec => {
+                                        const resp = ses.additionalResponses!.find(r => r.sectionId === sec.id);
+                                        if (!resp) return null;
+                                        return (
+                                            <div key={sec.id} className="bg-muted/40 rounded-xl p-3 space-y-1">
+                                                <p className="text-xs font-semibold text-muted-foreground">{sec.title}</p>
+                                                <div className="grid grid-cols-2 gap-1">
+                                                    {sec.fields.map(f => (
+                                                        <div key={f.id}>
+                                                            <span className="text-xs text-muted-foreground">{f.label}: </span>
+                                                            <span className="text-xs font-medium">{resp.responses[f.id] ?? '–'}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            );
+                        };
+                        return (
+                            <div className="space-y-4">
+                                {renderSession(sessions.pretest, 'ผล Pre-test (ก่อนเรียน)')}
+                                {sessions.pretest && sessions.posttest && <div className="border-t" />}
+                                {renderSession(sessions.posttest, 'ผล Post-test (หลังเรียน)')}
+                            </div>
+                        );
+                    })()}
+                </DialogContent>
+            </Dialog>
+
+            {/* Reset Exam Confirmation */}
+            <AlertDialog open={!!resetConfirm} onOpenChange={open => !open && setResetConfirm(null)}>
+                <AlertDialogContent className="rounded-3xl">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="flex items-center gap-2">
+                            <RotateCcw className="w-5 h-5 text-amber-600" /> ยืนยันรีเซ็ตแบบทดสอบ
+                        </AlertDialogTitle>
+                        <AlertDialogDescription>
+                            ผู้อบรมจะสามารถทำแบบทดสอบ{resetConfirm?.session.examType === 'pretest' ? 'ก่อนเรียน' : 'หลังเรียน'}ใหม่ได้
+                            คะแนนเดิม ({resetConfirm?.session.rawScore}/{resetConfirm?.session.totalPoints} คะแนน) จะถูกเก็บไว้ในประวัติ
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl">ยกเลิก</AlertDialogCancel>
+                        <AlertDialogAction
+                            className="rounded-xl bg-amber-500 hover:bg-amber-600"
+                            disabled={isResetting}
+                            onClick={() => {
+                                if (!resetConfirm || !profile?.uid) return;
+                                startResetTransition(async () => {
+                                    const res = await resetExamSession(
+                                        resetConfirm.session.id,
+                                        resetConfirm.session.examType,
+                                        resetConfirm.trainingRecordId,
+                                        profile.uid,
+                                    );
+                                    toast({ title: res.message, variant: res.success ? 'default' : 'destructive' });
+                                    if (res.success) {
+                                        setResetConfirm(null);
+                                        setExamDrillRecord(null);
+                                    }
+                                });
+                            }}
+                        >
+                            {isResetting ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <RotateCcw className="w-4 h-4 mr-1" />}
+                            รีเซ็ตและให้สอบใหม่
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* CSV Import Dialog */}
             <Dialog open={isCsvModalOpen} onOpenChange={(open) => { setIsCsvModalOpen(open); if (!open) { setCsvPreview([]); setCsvErrors([]); } }}>

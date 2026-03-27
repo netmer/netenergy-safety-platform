@@ -26,7 +26,9 @@ import {
   Network,
   TestTube2,
   FolderOpen,
-  ShieldCheck
+  ShieldCheck,
+  FileQuestion,
+  ClipboardCheck
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,6 +63,8 @@ const adminNavGroups = [
     label: "Management",
     items: [
       { href: '/admin/courses', label: 'จัดการหลักสูตร', Icon: BookOpen },
+      { href: '/admin/exams', label: 'จัดการแบบทดสอบ', Icon: FileQuestion },
+      { href: '/admin/evaluations', label: 'จัดการแบบประเมิน', Icon: ClipboardCheck },
       { href: '/admin/users', label: 'จัดการผู้ใช้', Icon: Users },
       { href: '/admin/instructors', label: 'จัดการวิทยากร', Icon: UserCircle },
     ]

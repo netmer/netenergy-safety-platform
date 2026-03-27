@@ -780,3 +780,34 @@ export async function sendBulkScheduleEmail(scheduleId: string, subject: string,
 
     return { success: true, message: `ส่งอีเมลสำเร็จ ${sent} รายการ, ล้มเหลว ${failed} รายการ`, sent, failed };
 }
+
+/**
+ * Marks an exam session as superseded so the trainee can retake the exam.
+ * The old session is preserved with superseded=true for audit history.
+ * The trainee's score on the TrainingRecord is cleared.
+ */
+export async function resetExamSession(
+    sessionId: string,
+    examType: 'pretest' | 'posttest',
+    trainingRecordId: string,
+    staffUid: string,
+): Promise<{ success: boolean; message: string }> {
+    try {
+        const now = new Date().toISOString();
+        const scoreField = examType === 'pretest' ? 'preTestScore' : 'postTestScore';
+        const batch = writeBatch(db);
+        batch.update(doc(db, 'examSessions', sessionId), {
+            superseded: true,
+            supersededAt: now,
+            supersededBy: staffUid,
+        });
+        batch.update(doc(db, 'trainingRecords', trainingRecordId), {
+            [scoreField]: '',
+        });
+        await batch.commit();
+        return { success: true, message: 'รีเซ็ตแบบทดสอบแล้ว ผู้อบรมสามารถสอบใหม่ได้' };
+    } catch (e) {
+        console.error('resetExamSession error', e);
+        return { success: false, message: 'เกิดข้อผิดพลาด กรุณาลองใหม่' };
+    }
+}

@@ -16,10 +16,12 @@ export function ConditionalLayout({ children }: { children: React.ReactNode }) {
 
     const isErpPage = pathname.startsWith('/erp');
     const isAdminPage = pathname.startsWith('/admin');
+    const isExamPage = pathname.startsWith('/exam');
+    const isEvalPage = pathname.startsWith('/eval');
     const isHomePage = pathname === '/';
 
-    // On ERP or Admin pages, we don't render the public header and footer
-    if (isErpPage || isAdminPage) {
+    // On ERP, Admin, Exam, or Eval pages, we don't render the public header and footer
+    if (isErpPage || isAdminPage || isExamPage || isEvalPage) {
         return <main className="flex-grow">{children}</main>;
     }
     

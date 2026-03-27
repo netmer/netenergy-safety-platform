@@ -23,7 +23,9 @@ import {
   ChevronRight,
   X,
   ChevronsRight,
-  Package
+  Package,
+  BarChart2,
+  Star
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,6 +70,8 @@ const erpNavGroups = [
   {
     label: "Records & Billing",
     items: [
+      { href: '/erp/exam-results', label: 'ผลการทดสอบ', Icon: BarChart2, roles: ['admin', 'training_team', 'course_specialist'] },
+      { href: '/erp/evaluation-results', label: 'ผลการประเมิน', Icon: Star, roles: ['admin', 'training_team', 'course_specialist'] },
       { href: '/erp/billing', label: 'การเงิน/บัญชี', Icon: CreditCard, roles: ['admin', 'accounting_team'] },
       { href: '/erp/delivery', label: 'การจัดส่ง', Icon: Package, roles: ['admin', 'course_specialist', 'training_team'] },
       { href: '/erp/history', label: 'ประวัติการอบรม', Icon: History, roles: ['admin', 'training_team', 'inspection_team'] },
