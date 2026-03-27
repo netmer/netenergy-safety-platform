@@ -120,7 +120,7 @@ export function EvaluationsClientPage({
                                         <TableCell className="text-sm">{t.sections.length} ส่วน</TableCell>
                                         <TableCell className="text-sm">
                                             {t.sections.reduce((s, sec) => s + sec.items.length, 0)} หัวข้อ
-                                            {t.openQuestions.length > 0 && ` · ${t.openQuestions.length} คำถามปลายเปิด`}
+                                            {t.openQuestions.length > 0 && ` · ${t.openQuestions.length} ข้อคิดเห็น`}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <DropdownMenu>

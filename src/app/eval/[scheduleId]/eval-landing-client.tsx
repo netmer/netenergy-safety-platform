@@ -72,7 +72,7 @@ export function EvalLandingClient({
                                 <p className="font-semibold text-sm">{template.name}</p>
                                 <p className="text-xs text-muted-foreground mt-0.5">
                                     {template.sections.length} หมวด · {totalItems} หัวข้อ
-                                    {template.openQuestions.length > 0 && ` · ${template.openQuestions.length} คำถามปลายเปิด`}
+                                    {template.openQuestions.length > 0 && ` · ${template.openQuestions.length} ข้อคิดเห็น`}
                                 </p>
                             </div>
                         </div>
@@ -84,10 +84,6 @@ export function EvalLandingClient({
                                 <ArrowRight className="w-5 h-5" />
                             </Button>
                         </Link>
-
-                        <p className="text-center text-xs text-muted-foreground">
-                            ไม่ต้องระบุชื่อ · ใช้เวลาไม่เกิน 5 นาที
-                        </p>
                     </div>
                 </div>
 

@@ -33,17 +33,14 @@ echo [OK] Packages installed.
 REM Register as user-level Task Scheduler task (no admin required)
 echo.
 echo [2/2] Registering auto-start task...
-powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$dir = '%~dp0'.TrimEnd('\\');" ^
-    "$nodePath = (Get-Command node -ErrorAction SilentlyContinue).Source;" ^
-    "if (-not $nodePath) { $nodePath = 'node.exe' };" ^
-    "$action = New-ScheduledTaskAction -Execute $nodePath -Argument 'server.js' -WorkingDirectory $dir;" ^
-    "$trigger = New-ScheduledTaskTrigger -AtLogOn;" ^
-    "$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries;" ^
-    "$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;" ^
-    "Unregister-ScheduledTask -TaskName 'CardReader-NETEnergy' -Confirm:$false -ErrorAction SilentlyContinue;" ^
-    "$result = Register-ScheduledTask -TaskName 'CardReader-NETEnergy' -Action $action -Trigger $trigger -Settings $settings -Principal $principal -ErrorAction SilentlyContinue;" ^
-    "if ($result) { Write-Host '[OK] Auto-start task registered.' } else { Write-Host '[WARN] Task registration failed - service will need to be started manually.' }"
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-task.ps1" -Dir "%~dp0"
+if errorlevel 1 (
+    echo.
+    echo [WARN] Auto-start registration failed - see message above.
+    echo        The service will run now but may not auto-start after reboot.
+    echo        Try running install.bat again, or contact IT Support.
+    echo.
+)
 
 REM Start service now (hidden window)
 echo.

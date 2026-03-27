@@ -195,7 +195,7 @@ export function EvalResultsClientPage({
                 <TabsContent value="comments" className="space-y-6 mt-4">
                     {openStats.length === 0 ? (
                         <Card className="rounded-2xl border-none shadow-sm">
-                            <CardContent className="py-12 text-center text-muted-foreground">ไม่มีคำถามปลายเปิด</CardContent>
+                            <CardContent className="py-12 text-center text-muted-foreground">ไม่มีข้อคิดเห็น</CardContent>
                         </Card>
                     ) : (
                         openStats.map(({ question, answers }) => (

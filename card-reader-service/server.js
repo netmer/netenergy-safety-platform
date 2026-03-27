@@ -135,9 +135,10 @@ async function checkForUpdates() {
         pkg.version = remoteVersion;
         fs.writeFileSync(path.join(__dirname, 'package.json'), JSON.stringify(pkg, null, 2), 'utf8');
 
-        console.log(`[Update] Done — restarting service (node-windows will restart automatically)`);
-        // node-windows จะ restart service ให้อัตโนมัติ
-        process.exit(0);
+        console.log(`[Update] Done — restarting service...`);
+        // Exit code 1 = Task Scheduler จะ restart อัตโนมัติภายใน 30 วินาที
+        // (ต้องติดตั้งด้วย install.bat v1.6+ เพื่อให้ RestartCount/RestartInterval ทำงาน)
+        process.exit(1);
 
     } catch {
         // ถ้า update ล้มเหลว service ยังทำงานต่อด้วย version ปัจจุบัน

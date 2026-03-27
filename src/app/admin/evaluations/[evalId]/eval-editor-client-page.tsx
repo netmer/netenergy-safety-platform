@@ -131,7 +131,7 @@ export function EvalEditorClientPage({ template: initial }: { template: Evaluati
                         className="rounded-xl text-base font-medium"
                     />
                     <p className="text-xs text-muted-foreground mt-2">
-                        {sections.length} ส่วน · {totalItems} หัวข้อประเมิน · {openQuestions.length} คำถามปลายเปิด
+                        {sections.length} ส่วน · {totalItems} หัวข้อประเมิน · {openQuestions.length} ข้อคิดเห็น
                     </p>
                 </CardContent>
             </Card>
@@ -207,7 +207,7 @@ export function EvalEditorClientPage({ template: initial }: { template: Evaluati
             {/* Open questions */}
             <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                    <h2 className="font-semibold">คำถามปลายเปิด</h2>
+                    <h2 className="font-semibold">ข้อคิดเห็น</h2>
                     <Button variant="outline" size="sm" onClick={addOpenQuestion} className="gap-2 rounded-xl">
                         <Plus className="w-3.5 h-3.5" /> เพิ่มคำถาม
                     </Button>
@@ -245,7 +245,7 @@ export function EvalEditorClientPage({ template: initial }: { template: Evaluati
 
                 {openQuestions.length === 0 && (
                     <div className="rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-800 p-6 text-center text-muted-foreground text-sm">
-                        ไม่มีคำถามปลายเปิด (ไม่จำเป็น)
+                        ไม่มีข้อคิดเห็น
                     </div>
                 )}
             </div>
