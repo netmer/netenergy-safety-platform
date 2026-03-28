@@ -114,7 +114,7 @@ export function CertificateClientPage({ records, schedules, courses, categories,
 
         {recordToView && recordCourse && recordSchedule && (
             <Dialog open={!!recordToView} onOpenChange={(v) => !v && setRecordToView(null)}>
-                <DialogContent className="max-w-5xl rounded-[2rem] p-0 overflow-hidden shadow-2xl border-none">
+                <DialogContent className="max-w-5xl rounded-[2rem] p-0 shadow-2xl border-none">
                     <DialogHeader className="p-8 pb-4 text-left border-b bg-white dark:bg-slate-950">
                         <DialogTitle className="text-xl font-bold font-headline">พรีวิวใบประกาศนียบัตร</DialogTitle>
                         <DialogDescription>{recordToView.attendeeName} - {recordCourse.title}</DialogDescription>

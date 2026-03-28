@@ -111,7 +111,10 @@ export type AdditionalDoc = {
 export type AttendeeData = {
     id: string; // This is the attendeeId (National ID / Passport)
     attendeeId: string;
-    fullName: string;
+    fullName: string;        // combined synced field — kept for backward compat
+    title?: string;          // คำนำหน้า เช่น นาย, นาง, นางสาว, ดร.
+    firstName?: string;      // ชื่อ
+    lastName?: string;       // นามสกุล
     dateOfBirth?: string;
     education?: string;
     profilePicture?: string;
@@ -124,7 +127,10 @@ export type AttendeeData = {
 export type TrainingRecord = {
     id: string; // Auto-generated ID
     attendeeId: string | null; // National ID / Passport, linking to the 'attendees' collection. Can be null initially.
-    attendeeName: string;
+    attendeeName: string;        // combined synced field — kept for orderBy + searchTokens
+    attendeeTitle?: string;      // คำนำหน้า เช่น นาย, นาง, นางสาว, ดร.
+    attendeeFirstName?: string;  // ชื่อ
+    attendeeLastName?: string;   // นามสกุล
     companyName: string;
     registrationId: string; // Original registration this came from
     registrationAttendeeId: string; // Links to the specific attendee object in the registration.

@@ -41,7 +41,7 @@ import { useCardReader } from '@/hooks/use-card-reader';
 import { ExamQrButton } from '@/components/erp/exam-qr-button';
 import { EvalQrButton } from '@/components/erp/eval-qr-button';
 import { bulkImportWalkInAttendees, bulkCompleteTrainingRecords, updateTrainingRecord, updateAttendeeOrder, resetExamSession, type BulkImportRow } from '@/app/erp/attendees/actions';
-import { validateThaiID } from '@/lib/attendee-utils';
+import { validateThaiID, buildFullName } from '@/lib/attendee-utils';
 import Link from 'next/link';
 import { CertificateTemplate } from '@/app/erp/certificate/certificate-template';
 
@@ -474,7 +474,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
     const applySmartCardData = async (record: TrainingRecord, data: any) => {
         if (!firestore) return;
         const { setDoc } = await import('firebase/firestore');
-        const fullName = `${data.titleTH || ''}${data.firstNameTH || ''} ${data.lastNameTH || ''}`.trim();
+        const fullName = buildFullName(data.titleTH, data.firstNameTH, data.lastNameTH) || record.attendeeName;
         startTransition(async () => {
             try {
                 const recordRef = doc(firestore, 'trainingRecords', record.id);
@@ -482,12 +482,18 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 await updateDocumentNonBlocking(recordRef, {
                     attendance: 'present',
                     attendeeId: data.citizenId,
-                    attendeeName: fullName || record.attendeeName,
+                    attendeeName: fullName,
+                    ...(data.titleTH && { attendeeTitle: data.titleTH }),
+                    ...(data.firstNameTH && { attendeeFirstName: data.firstNameTH }),
+                    ...(data.lastNameTH && { attendeeLastName: data.lastNameTH }),
                     dateOfBirth: data.dob || null
                 });
                 await setDoc(attendeeRef, {
                     attendeeId: data.citizenId,
-                    fullName: fullName || record.attendeeName,
+                    fullName,
+                    ...(data.titleTH && { title: data.titleTH }),
+                    ...(data.firstNameTH && { firstName: data.firstNameTH }),
+                    ...(data.lastNameTH && { lastName: data.lastNameTH }),
                     dateOfBirth: data.dob || null
                 }, { merge: true });
                 await logHistory('อ่านบัตร Smart Card', `เสียบบัตร ปชช. ${data.citizenId} เช็คชื่อ [${fullName}]`);
@@ -558,15 +564,40 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
         reader.onload = (ev) => {
             const text = ev.target?.result as string;
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-            // Skip header row if it starts with non-numeric / contains "ชื่อ" keyword
-            const dataLines = lines[0]?.toLowerCase().includes('ชื่อ') || lines[0]?.toLowerCase().includes('name') ? lines.slice(1) : lines;
+            // Skip header row if it contains Thai name keywords
+            const isHeader = (l: string) => /ชื่อ|นามสกุล|name|title|คำนำ/i.test(l.split(/,|\t/)[0]);
+            const dataLines = isHeader(lines[0] || '') ? lines.slice(1) : lines;
             const rows: BulkImportRow[] = [];
             const errs: string[] = [];
+            // Detect format by column count of first data line
+            const firstCols = (dataLines[0] || '').split(/,|\t/).map(c => c.replace(/^"|"$/g, '').trim());
+            const isNewFormat = firstCols.length >= 4; // คำนำหน้า,ชื่อ,นามสกุล,บริษัท,[เลขบัตร]
             dataLines.forEach((line, i) => {
-                // Support comma or tab separated. Columns: attendeeName, companyName, attendeeId(optional)
                 const cols = line.split(/,|\t/).map(c => c.replace(/^"|"$/g, '').trim());
-                if (cols.length < 2) { errs.push(`แถว ${i + 1}: ต้องมีอย่างน้อย 2 คอลัมน์ (ชื่อ, บริษัท)`); return; }
-                rows.push({ attendeeName: cols[0], companyName: cols[1], attendeeId: cols[2] || undefined });
+                if (isNewFormat) {
+                    // New format: col[0]=title, col[1]=firstName, col[2]=lastName, col[3]=company, col[4]=id
+                    if (cols.length < 3) { errs.push(`แถว ${i + 1}: format ใหม่ต้องมีอย่างน้อย 3 คอลัมน์ (คำนำหน้า, ชื่อ, นามสกุล, บริษัท)`); return; }
+                    const title = cols[0] || '';
+                    const firstName = cols[1] || '';
+                    const lastName = cols[2] || '';
+                    const company = cols[3] || '';
+                    if (!firstName && !lastName) { errs.push(`แถว ${i + 1}: ต้องกรอกชื่อหรือนามสกุล`); return; }
+                    if (!company) { errs.push(`แถว ${i + 1}: ต้องกรอกชื่อบริษัท`); return; }
+                    rows.push({
+                        attendeeName: buildFullName(title, firstName, lastName),
+                        attendeeTitle: title || undefined,
+                        attendeeFirstName: firstName || undefined,
+                        attendeeLastName: lastName || undefined,
+                        companyName: company,
+                        attendeeId: cols[4] || undefined,
+                    });
+                } else {
+                    // Legacy format: col[0]=attendeeName, col[1]=company, col[2]=id
+                    if (cols.length < 2) { errs.push(`แถว ${i + 1}: ต้องมีอย่างน้อย 2 คอลัมน์ (ชื่อ-นามสกุล, บริษัท)`); return; }
+                    if (!cols[0]) { errs.push(`แถว ${i + 1}: ต้องกรอกชื่อ-นามสกุล`); return; }
+                    if (!cols[1]) { errs.push(`แถว ${i + 1}: ต้องกรอกชื่อบริษัท`); return; }
+                    rows.push({ attendeeName: cols[0], companyName: cols[1], attendeeId: cols[2] || undefined });
+                }
             });
             setCsvPreview(rows);
             setCsvErrors(errs);
@@ -801,7 +832,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                             {/* Data Grid */}
                             <div className="overflow-x-auto custom-scrollbar">
                                 <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                                <Table className="min-w-[1260px]">
+                                <Table className="min-w-[1340px]">
                                     <TableHeader className="bg-white dark:bg-slate-900 border-y">
                                         <TableRow className="hover:bg-transparent shadow-sm">
                                             <TableHead className="py-5 pl-3 w-[72px] uppercase tracking-widest text-[11px] text-slate-400 font-bold">ลำดับ</TableHead>
@@ -812,7 +843,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                                                     aria-label="เลือกทั้งหมด"
                                                 />
                                             </TableHead>
-                                            <TableHead className="py-5 uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[280px]">ชื่อผู้อบรม / บริษัท</TableHead>
+                                            <TableHead className="py-5 uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[360px]">ชื่อผู้อบรม / บริษัท</TableHead>
                                             <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[260px]">เช็คชื่อรายวัน</TableHead>
                                             <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold w-[200px]">การตรวจสอบ (Docs)</TableHead>
                                             <TableHead className="uppercase tracking-widest text-[11px] text-slate-400 font-bold text-center w-[200px]">คะแนน (Pre / Post)</TableHead>
@@ -1242,8 +1273,9 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                             <Upload className="w-6 h-6 text-primary" /> นำเข้ารายชื่อจาก CSV
                         </DialogTitle>
                         <DialogDescription>
-                            รูปแบบ CSV: <code className="bg-muted px-1 rounded text-xs">ชื่อ-นามสกุล, บริษัท/หน่วยงาน, เลขบัตรประชาชน (optional)</code><br />
-                            รองรับ comma (,) หรือ tab (\t) เป็น delimiter — สามารถมี header row ได้
+                            <span className="font-bold text-foreground">format ใหม่ (แนะนำ):</span> <code className="bg-muted px-1 rounded text-xs">คำนำหน้า, ชื่อ, นามสกุล, บริษัท, เลขบัตร (optional)</code><br />
+                            <span className="font-bold text-foreground">format เดิม:</span> <code className="bg-muted px-1 rounded text-xs">ชื่อ-นามสกุล, บริษัท, เลขบัตร (optional)</code><br />
+                            รองรับ comma (,) หรือ tab (\t) — สามารถมี header row ได้
                         </DialogDescription>
                     </DialogHeader>
                     <div className="px-6 space-y-4">
@@ -1314,7 +1346,7 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                 if (!certCourse || !certSchedule) return null;
                 return (
                     <Dialog open={!!recordForCertificate} onOpenChange={(v) => !v && setRecordForCertificate(null)}>
-                        <DialogContent className="max-w-5xl rounded-[2rem] p-0 overflow-hidden shadow-2xl border-none z-[200]">
+                        <DialogContent className="max-w-5xl rounded-[2rem] p-0 shadow-2xl border-none z-[200]">
                             <DialogHeader className="p-6 pb-4 text-left border-b bg-white dark:bg-slate-950 print:hidden">
                                 <DialogTitle className="text-xl font-bold font-headline flex items-center gap-2">
                                     <Award className="w-5 h-5 text-amber-500" /> พรีวิวใบประกาศนียบัตร

@@ -40,7 +40,7 @@ export function CardReaderInstallDialog({ open, onClose, reason }: CardReaderIns
 
     return (
         <Dialog open={open} onOpenChange={(o) => { if (!o) onClose(); }}>
-            <DialogContent className="sm:max-w-[480px] rounded-3xl p-0 overflow-hidden">
+            <DialogContent className="sm:max-w-[480px] rounded-3xl p-0">
                 {/* Header */}
                 <div className={`px-7 py-6 text-white ${
                     reason === 'no_reader' ? 'bg-gradient-to-br from-amber-500 to-orange-600'

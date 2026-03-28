@@ -8,7 +8,7 @@
  * - Add prefixes (length 2–10) of each word so partial-word search works
  * - Add the full normalized strings
  */
-export function generateSearchTokens(attendeeName: string, companyName: string): string[] {
+export function generateSearchTokens(attendeeName: string, companyName: string, firstName?: string, lastName?: string): string[] {
     const tokens = new Set<string>();
 
     const normalize = (str: string) =>
@@ -32,6 +32,10 @@ export function generateSearchTokens(attendeeName: string, companyName: string):
     // Individual words and their prefixes
     nameNorm.split(' ').filter(Boolean).forEach(addPrefixes);
     companyNorm.split(' ').filter(Boolean).forEach(addPrefixes);
+
+    // Also tokenize firstName and lastName separately when provided
+    if (firstName) normalize(firstName).split(' ').filter(Boolean).forEach(addPrefixes);
+    if (lastName) normalize(lastName).split(' ').filter(Boolean).forEach(addPrefixes);
 
     return Array.from(tokens).filter(t => t.length > 0);
 }

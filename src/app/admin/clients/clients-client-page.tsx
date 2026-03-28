@@ -145,7 +145,7 @@ export function ClientsClientPage({ clients }: { clients: Client[] }) {
             </CardContent>
             
             <Dialog open={isFormOpen} onOpenChange={(isOpen) => !isOpen && handleCloseDialogs()}>
-                <DialogContent className="sm:max-w-2xl rounded-3xl overflow-hidden">
+                <DialogContent className="sm:max-w-2xl rounded-3xl">
                     <DialogHeader>
                         <DialogTitle>{clientToEdit ? 'แก้ไขข้อมูลลูกค้า' : 'เพิ่มลูกค้าใหม่'}</DialogTitle>
                         <DialogDescription>

@@ -8,6 +8,7 @@ import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage
 import {nanoid} from 'nanoid';
 import { format, addYears } from 'date-fns';
 import { generateSearchTokens } from '@/lib/search-utils';
+import { buildFullName } from '@/lib/attendee-utils';
 import { z } from 'zod';
 import { createSystemNotification } from '@/lib/notifications';
 
@@ -162,7 +163,9 @@ export async function updateTrainingRecord(recordId: string, updates: Partial<Tr
             updates.completionYearCE = completionTime.getFullYear();
             updates.searchTokens = generateSearchTokens(
                 recordData.attendeeName,
-                recordData.companyName
+                recordData.companyName,
+                recordData.attendeeFirstName,
+                recordData.attendeeLastName
             );
         }
     }
@@ -360,19 +363,28 @@ export async function updateSingleAttendeeData(formData: FormData) {
         
         const recordToUpdate = { ...recordSnap.data() } as TrainingRecord;
         
-        (['attendeeName', 'companyName'] as const).forEach(field => {
+        (['attendeeName', 'companyName', 'attendeeTitle', 'attendeeFirstName', 'attendeeLastName'] as const).forEach(field => {
             if (formData.has(field)) {
-                recordToUpdate[field] = formData.get(field) as string;
+                (recordToUpdate as any)[field] = formData.get(field) as string;
             }
         });
 
+        // Recompute combined attendeeName if any name part changed
+        if (formData.has('attendeeFirstName') || formData.has('attendeeLastName') || formData.has('attendeeTitle')) {
+            const computed = buildFullName(recordToUpdate.attendeeTitle, recordToUpdate.attendeeFirstName, recordToUpdate.attendeeLastName);
+            if (computed) recordToUpdate.attendeeName = computed;
+        }
+
         const attendeeProfileRef = newAttendeeId ? doc(db, 'attendees', newAttendeeId) : null;
-        
+
         const profileUpdates: Partial<AttendeeData> = {};
         if (formData.has('dateOfBirth')) profileUpdates.dateOfBirth = formData.get('dateOfBirth') as string;
         if (formData.has('education')) profileUpdates.education = formData.get('education') as string;
         if (newAttendeeId) profileUpdates.attendeeId = newAttendeeId;
         profileUpdates.fullName = recordToUpdate.attendeeName;
+        profileUpdates.title = recordToUpdate.attendeeTitle;
+        profileUpdates.firstName = recordToUpdate.attendeeFirstName;
+        profileUpdates.lastName = recordToUpdate.attendeeLastName;
 
         const profilePictureFile = formData.get('profilePicture') as File;
         if (profilePictureFile && profilePictureFile.size > 0 && newAttendeeId) {
@@ -573,7 +585,7 @@ export async function bulkCompleteTrainingRecords(recordIds: string[]): Promise<
                 expiryDate,
                 passedTraining: true,
                 completionYearCE,
-                searchTokens: generateSearchTokens(data.attendeeName, data.companyName),
+                searchTokens: generateSearchTokens(data.attendeeName, data.companyName, data.attendeeFirstName, data.attendeeLastName),
             },
         });
     }
@@ -652,9 +664,12 @@ export async function bulkCheckInAttendees(scheduleId: string, recordIds: string
 }
 
 export type BulkImportRow = {
-    attendeeName: string;
+    attendeeName: string;       // combined — used as fallback or legacy format
+    attendeeTitle?: string;     // คำนำหน้า (new format)
+    attendeeFirstName?: string; // ชื่อ (new format)
+    attendeeLastName?: string;  // นามสกุล (new format)
     companyName: string;
-    attendeeId?: string; // National ID / Passport (optional)
+    attendeeId?: string;        // National ID / Passport (optional)
 };
 
 /** CSV bulk import: creates training records for a list of attendees */
@@ -693,9 +708,15 @@ export async function bulkImportWalkInAttendees(rows: BulkImportRow[], scheduleI
                 }
             }
             const newRef = doc(collection(db, 'trainingRecords'));
+            const fullName = (row.attendeeFirstName || row.attendeeLastName)
+                ? buildFullName(row.attendeeTitle, row.attendeeFirstName, row.attendeeLastName)
+                : row.attendeeName.trim();
             const recordData: Omit<TrainingRecord, 'id'> = {
                 attendeeId: row.attendeeId || null,
-                attendeeName: row.attendeeName.trim(),
+                attendeeName: fullName,
+                ...(row.attendeeTitle && { attendeeTitle: row.attendeeTitle }),
+                ...(row.attendeeFirstName && { attendeeFirstName: row.attendeeFirstName }),
+                ...(row.attendeeLastName && { attendeeLastName: row.attendeeLastName }),
                 companyName: row.companyName.trim(),
                 registrationId: `bulk-import-${nanoid()}`,
                 registrationAttendeeId: `bulk-import-${nanoid()}`,

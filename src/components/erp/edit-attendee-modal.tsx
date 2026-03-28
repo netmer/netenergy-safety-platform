@@ -13,8 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2, Search, CheckCircle2, AlertCircle, FileText, UploadCloud, Trash2, Calendar, Phone, Mail, GraduationCap, Camera } from 'lucide-react';
 import type { TrainingRecord, AttendeeData } from '@/lib/course-data';
 import { cn } from '@/lib/utils';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { validateThaiID } from '@/lib/attendee-utils';
+import { validateThaiID, buildFullName, parseFullName } from '@/lib/attendee-utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { CardReaderButton } from '@/components/erp/card-reader-button';
 import { nanoid } from 'nanoid';
@@ -34,7 +34,9 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
 
     // Profile Fields
     const [attendeeId, setAttendeeId] = useState('');
-    const [attendeeName, setAttendeeName] = useState('');
+    const [attendeeTitle, setAttendeeTitle] = useState('');
+    const [attendeeFirstName, setAttendeeFirstName] = useState('');
+    const [attendeeLastName, setAttendeeLastName] = useState('');
     const [companyName, setCompanyName] = useState('');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [emailAddress, setEmailAddress] = useState('');
@@ -58,7 +60,17 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
     useEffect(() => {
         if (record && isOpen) {
             setAttendeeId(record.attendeeId || '');
-            setAttendeeName(record.attendeeName || '');
+            // Prefer split fields; fall back to parsing combined attendeeName
+            if (record.attendeeFirstName || record.attendeeLastName) {
+                setAttendeeTitle(record.attendeeTitle || '');
+                setAttendeeFirstName(record.attendeeFirstName || '');
+                setAttendeeLastName(record.attendeeLastName || '');
+            } else {
+                const parsed = parseFullName(record.attendeeName || '');
+                setAttendeeTitle(parsed.title);
+                setAttendeeFirstName(parsed.firstName);
+                setAttendeeLastName(parsed.lastName);
+            }
             setCompanyName(record.companyName || '');
             setPhoneNumber((record as any).phoneNumber || '');
             setEmailAddress((record as any).emailAddress || '');
@@ -85,7 +97,19 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
             const attendeeSnap = await getDoc(doc(firestore, 'attendees', id));
             if (attendeeSnap.exists()) {
                 const data = attendeeSnap.data() as AttendeeData;
-                if (data.fullName && !attendeeName) setAttendeeName(data.fullName);
+                // Prefer split name fields; fallback to parsing fullName
+                if (data.firstName) {
+                    if (!attendeeFirstName) {
+                        if (data.title) setAttendeeTitle(data.title);
+                        setAttendeeFirstName(data.firstName);
+                        if (data.lastName) setAttendeeLastName(data.lastName);
+                    }
+                } else if (data.fullName && !attendeeFirstName) {
+                    const parsed = parseFullName(data.fullName);
+                    setAttendeeTitle(parsed.title);
+                    setAttendeeFirstName(parsed.firstName);
+                    setAttendeeLastName(parsed.lastName);
+                }
                 if (data.dateOfBirth && !dateOfBirth) setDateOfBirth(data.dateOfBirth);
                 if (data.education && !education) setEducation(data.education);
                 if (data.profilePicture && !profilePictureUrl) setProfilePictureUrl(data.profilePicture);
@@ -93,12 +117,24 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                     const urls = data.documents.map(d => typeof d === 'string' ? d : d.url);
                     setDocuments(prev => [...new Set([...prev, ...urls])]);
                 }
-                toast({ title: 'พบข้อมูลเดิมในระบบ', description: `โหลดข้อมูลของ ${data.fullName} แล้ว` });
+                const displayName = data.firstName ? buildFullName(data.title, data.firstName, data.lastName) : (data.fullName || '');
+                toast({ title: 'พบข้อมูลเดิมในระบบ', description: `โหลดข้อมูลของ ${displayName} แล้ว` });
             } else {
                 const snap = await getDocs(query(collection(firestore, 'trainingRecords'), where('attendeeId', '==', id)));
                 if (!snap.empty) {
                     const d = snap.docs[0].data();
-                    if (d.attendeeName && !attendeeName) setAttendeeName(d.attendeeName);
+                    if (!attendeeFirstName) {
+                        if (d.attendeeFirstName) {
+                            if (d.attendeeTitle) setAttendeeTitle(d.attendeeTitle);
+                            setAttendeeFirstName(d.attendeeFirstName);
+                            if (d.attendeeLastName) setAttendeeLastName(d.attendeeLastName);
+                        } else if (d.attendeeName) {
+                            const parsed = parseFullName(d.attendeeName);
+                            setAttendeeTitle(parsed.title);
+                            setAttendeeFirstName(parsed.firstName);
+                            setAttendeeLastName(parsed.lastName);
+                        }
+                    }
                     if (d.companyName && !companyName) setCompanyName(d.companyName);
                     if (d.phoneNumber && !phoneNumber) setPhoneNumber(d.phoneNumber);
                     if (d.emailAddress && !emailAddress) setEmailAddress(d.emailAddress);
@@ -191,12 +227,17 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
             }
         }
 
+        const attendeeName = buildFullName(attendeeTitle, attendeeFirstName, attendeeLastName) || record.attendeeName;
+
         startTransition(async () => {
             try {
                 const recordRef = doc(firestore, 'trainingRecords', record.id);
                 const updates = {
                     attendeeId: attendeeId || null,
                     attendeeName,
+                    attendeeTitle: attendeeTitle || undefined,
+                    attendeeFirstName: attendeeFirstName || undefined,
+                    attendeeLastName: attendeeLastName || undefined,
                     companyName,
                     phoneNumber,
                     emailAddress,
@@ -212,6 +253,9 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                     await setDoc(attendeeRef, {
                         attendeeId: attendeeId,
                         fullName: attendeeName,
+                        title: attendeeTitle || undefined,
+                        firstName: attendeeFirstName || undefined,
+                        lastName: attendeeLastName || undefined,
                         phone: phoneNumber,
                         email: emailAddress,
                         dateOfBirth,
@@ -233,15 +277,15 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
         <Dialog open={isOpen} onOpenChange={(open) => {
             if (!open) { onClose(); setUploadProgress(null); }
         }}>
-            <DialogContent className="sm:max-w-[650px] rounded-3xl p-0 overflow-hidden bg-slate-50 dark:bg-slate-950 flex flex-col max-h-[90vh]">
-                <div className="bg-white dark:bg-slate-900 border-b px-6 py-5">
+            <DialogContent className="sm:max-w-[650px] rounded-3xl p-0 bg-slate-50 dark:bg-slate-950 flex flex-col max-h-[90vh] overflow-hidden">
+                <div className="bg-white dark:bg-slate-900 border-b px-6 py-5 shrink-0">
                     <DialogTitle className="text-2xl font-bold font-headline">ข้อมูลประวัติผู้อบรม (360° Profile)</DialogTitle>
                     <DialogDescription className="mt-1">ตรวจสอบความถูกและอัปเดตข้อมูลผู้เรียนให้เป็นปัจจุบัน</DialogDescription>
                 </div>
 
-                <div className="flex-1 overflow-hidden">
-                    <Tabs defaultValue="info" className="w-full flex flex-col h-full">
-                        <div className="px-6 pt-4 bg-white dark:bg-slate-900">
+                <div className="flex-1 min-h-0 flex flex-col">
+                    <Tabs defaultValue="info" className="w-full flex flex-col min-h-0 flex-1">
+                        <div className="px-6 pt-4 bg-white dark:bg-slate-900 shrink-0">
                             <TabsList className="grid w-full grid-cols-3 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                                 <TabsTrigger value="info" className="rounded-lg text-sm font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">ข้อมูลส่วนตัว</TabsTrigger>
                                 <TabsTrigger value="contact" className="rounded-lg text-sm font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">การติดต่อ</TabsTrigger>
@@ -250,8 +294,8 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                 </TabsTrigger>
                             </TabsList>
                         </div>
-                        
-                        <ScrollArea className="flex-1 h-full max-h-[450px]">
+
+                        <div className="flex-1 min-h-0 overflow-y-auto">
                             <div className="p-6">
                                 {/* -- TAB: INFO -- */}
                                 <TabsContent value="info" className="m-0 space-y-5 focus-visible:outline-none focus-visible:ring-0">
@@ -265,11 +309,11 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                             <Avatar className="w-20 h-20 ring-2 ring-slate-200 shadow-md">
                                                 <AvatarImage
                                                     src={profilePicturePreview || profilePictureUrl || undefined}
-                                                    alt={attendeeName}
+                                                    alt={buildFullName(attendeeTitle, attendeeFirstName, attendeeLastName)}
                                                     className="object-cover"
                                                 />
                                                 <AvatarFallback className="bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-2xl font-bold">
-                                                    {attendeeName ? attendeeName.charAt(0) : '?'}
+                                                    {attendeeFirstName ? attendeeFirstName.charAt(0) : '?'}
                                                 </AvatarFallback>
                                             </Avatar>
                                             <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -277,7 +321,7 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                             </div>
                                         </div>
                                         <div className="flex-1 space-y-1">
-                                            <p className="font-bold text-sm text-slate-700 dark:text-slate-200 line-clamp-1">{attendeeName || 'ยังไม่ระบุชื่อ'}</p>
+                                            <p className="font-bold text-sm text-slate-700 dark:text-slate-200 line-clamp-1">{buildFullName(attendeeTitle, attendeeFirstName, attendeeLastName) || 'ยังไม่ระบุชื่อ'}</p>
                                             <button
                                                 type="button"
                                                 onClick={() => profilePictureFileRef.current?.click()}
@@ -307,9 +351,11 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                         <CardReaderButton
                                             onCardRead={(data) => {
                                                 setAttendeeId(data.citizenId);
-                                                setAttendeeName(`${data.titleTH}${data.firstNameTH} ${data.lastNameTH}`.trim());
+                                                setAttendeeTitle(data.titleTH);
+                                                setAttendeeFirstName(data.firstNameTH);
+                                                setAttendeeLastName(data.lastNameTH);
                                                 if (!dateOfBirth && data.dob) setDateOfBirth(data.dob);
-                                                toast({ title: 'อ่านบัตร ปชช. สำเร็จ', description: `โหลดข้อมูลของ ${data.titleTH}${data.firstNameTH} ${data.lastNameTH} แล้ว` });
+                                                toast({ title: 'อ่านบัตร ปชช. สำเร็จ', description: `โหลดข้อมูลของ ${buildFullName(data.titleTH, data.firstNameTH, data.lastNameTH)} แล้ว` });
                                             }}
                                             onError={(msg) => toast({ variant: 'destructive', title: 'อ่านบัตรไม่สำเร็จ', description: msg })}
                                             className="mb-2"
@@ -331,10 +377,29 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                         {attendeeId.length === 13 && !validateThaiID(attendeeId) && <p className="text-[11px] text-rose-500 font-bold mt-1">รูปแบบรหัส 13 หลักไม่ถูกต้อง (Check Digit Failed)</p>}
                                     </div>
 
+                                    {/* Name — split into title + firstName + lastName */}
+                                    <div className="space-y-2">
+                                        <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">คำนำหน้า + ชื่อ ผู้อบรม</Label>
+                                        <div className="flex gap-2">
+                                            <Select value={attendeeTitle} onValueChange={setAttendeeTitle}>
+                                                <SelectTrigger className="w-[110px] h-11 rounded-xl shadow-sm bg-white shrink-0">
+                                                    <SelectValue placeholder="คำนำหน้า" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="นาย">นาย</SelectItem>
+                                                    <SelectItem value="นาง">นาง</SelectItem>
+                                                    <SelectItem value="นางสาว">นางสาว</SelectItem>
+                                                    <SelectItem value="ดร.">ดร.</SelectItem>
+                                                    <SelectItem value="อื่นๆ">อื่นๆ</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                            <Input value={attendeeFirstName} onChange={e => setAttendeeFirstName(e.target.value)} className="h-11 rounded-xl shadow-sm bg-white flex-1" placeholder="ชื่อ" />
+                                        </div>
+                                    </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                                         <div className="space-y-2">
-                                            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">ชื่อ-นามสกุล ผู้อบรม</Label>
-                                            <Input value={attendeeName} onChange={e => setAttendeeName(e.target.value)} className="h-11 rounded-xl shadow-sm bg-white" placeholder="เช่น นายสมปอง รักงาน" />
+                                            <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">นามสกุล ผู้อบรม</Label>
+                                            <Input value={attendeeLastName} onChange={e => setAttendeeLastName(e.target.value)} className="h-11 rounded-xl shadow-sm bg-white" placeholder="นามสกุล" />
                                         </div>
                                         <div className="space-y-2">
                                             <Label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> วัน/เดือน/ปีเกิด</Label>
@@ -419,11 +484,11 @@ export function EditAttendeeModal({ isOpen, onClose, record, onSuccess }: EditAt
                                     )}
                                 </TabsContent>
                             </div>
-                        </ScrollArea>
+                        </div>
                     </Tabs>
                 </div>
 
-                <div className="bg-white dark:bg-slate-900 border-t px-6 py-4 flex flex-col sm:flex-row gap-3 justify-end items-center">
+                <div className="bg-white dark:bg-slate-900 border-t px-6 py-4 flex flex-col sm:flex-row gap-3 justify-end items-center shrink-0">
                     <Button variant="ghost" className="rounded-xl h-11 w-full sm:w-auto font-bold text-slate-500 hover:bg-slate-100" onClick={onClose} disabled={isPending || uploadProgress !== null || isUploadingPhoto}>ยกเลิก</Button>
                     <Button onClick={handleSave} disabled={isPending || uploadProgress !== null || isUploadingPhoto || (attendeeId.length > 0 && !validateThaiID(attendeeId))} className="rounded-xl h-11 w-full sm:w-auto bg-slate-900 hover:bg-slate-800 text-white font-bold min-w-[120px] shadow-md">
                         {isPending || isUploadingPhoto ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <CheckCircle2 className="w-4 h-4 mr-2 text-emerald-400" />}
