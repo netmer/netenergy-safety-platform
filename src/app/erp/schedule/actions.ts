@@ -20,6 +20,7 @@ const FormSchema = z.object({
   instructorName: z.string().optional().or(z.literal('')),
   scheduleType: z.enum(['public', 'inhouse']).default('public'),
   clientId: z.string().optional().or(z.literal('')),
+  clientName: z.string().optional().or(z.literal('')),
 });
 
 export type FormState = {
@@ -105,7 +106,7 @@ export async function createSchedule(prevState: FormState, formData: FormData): 
     };
   }
 
-  const { courseId, location, status, startDate, endDate, instructorName, scheduleType, clientId } = validatedFields.data;
+  const { courseId, location, status, startDate, endDate, instructorName, scheduleType, clientId, clientName } = validatedFields.data;
 
   try {
     if (instructorName) {
@@ -127,6 +128,7 @@ export async function createSchedule(prevState: FormState, formData: FormData): 
       instructorTitle: 'วิทยากร',
       scheduleType: scheduleType || 'public',
       ...(clientId ? { clientId } : {}),
+      ...(clientName?.trim() ? { clientName: clientName.trim() } : {}),
       ...(inhouseToken ? { inhouseToken } : {}),
       createdAt: new Date().toISOString(),
     });
@@ -152,7 +154,7 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
         };
     }
 
-    const { courseId, location, status, startDate, endDate, instructorName, scheduleType, clientId } = validatedFields.data;
+    const { courseId, location, status, startDate, endDate, instructorName, scheduleType, clientId, clientName } = validatedFields.data;
     const scheduleRef = doc(db, 'trainingSchedules', id);
 
     try {
@@ -183,6 +185,7 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
             instructorName: instructorName || '',
             scheduleType: scheduleType || 'public',
             clientId: clientId || null,
+            clientName: clientName?.trim() || null,
             ...(isInhouse && inhouseToken ? { inhouseToken } : {}),
             updatedAt: new Date().toISOString(),
         });

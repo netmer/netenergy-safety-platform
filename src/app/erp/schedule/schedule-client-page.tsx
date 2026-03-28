@@ -116,6 +116,7 @@ export function ScheduleClientPage({ schedules: initialSchedules, courses, categ
     // Inhouse form state
     const [scheduleType, setScheduleType] = useState<'public' | 'inhouse'>('public');
     const [selectedClientId, setSelectedClientId] = useState('');
+    const [clientName, setClientName] = useState('');
     const [shownToken, setShownToken] = useState<string | undefined>();
     const [isResettingToken, setIsResettingToken] = useState(false);
 
@@ -156,6 +157,7 @@ export function ScheduleClientPage({ schedules: initialSchedules, courses, categ
         setScheduleToEdit(null);
         setScheduleType('public');
         setSelectedClientId('');
+        setClientName('');
         setShownToken(undefined);
         setIsFormOpen(true);
     };
@@ -164,6 +166,7 @@ export function ScheduleClientPage({ schedules: initialSchedules, courses, categ
         setScheduleToEdit(s);
         setScheduleType(s.scheduleType === 'inhouse' ? 'inhouse' : 'public');
         setSelectedClientId(s.clientId ?? '');
+        setClientName(s.clientName ?? '');
         setShownToken(s.inhouseToken);
         setIsFormOpen(true);
     };
@@ -273,6 +276,12 @@ export function ScheduleClientPage({ schedules: initialSchedules, courses, categ
                                                 <TableCell className="text-left font-medium text-sm text-slate-600 dark:text-slate-400">
                                                     <div className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5 text-primary" />{s.location}</div>
                                                     <div className="flex items-center gap-1.5 mt-1 opacity-70"><UserCircle className="w-3.5 h-3.5" />{s.instructorName || '-'}</div>
+                                                    {s.scheduleType === 'inhouse' && (s.clientId || s.clientName) && (
+                                                        <div className="flex items-center gap-1.5 mt-1 text-violet-600 dark:text-violet-400 font-semibold">
+                                                            <Building2 className="w-3.5 h-3.5" />
+                                                            {s.clientId ? (clients.find(c => c.id === s.clientId)?.companyName ?? s.clientName) : s.clientName}
+                                                        </div>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell className="text-center">
                                                     <div className="flex flex-col items-center gap-1.5">
@@ -436,19 +445,32 @@ export function ScheduleClientPage({ schedules: initialSchedules, courses, categ
                                     <p className="text-xs font-bold text-violet-700 dark:text-violet-400 uppercase tracking-widest">ตั้งค่า Inhouse</p>
 
                                     <div className="space-y-1.5">
-                                        <Label className="font-bold text-sm">บริษัทลูกค้า (optional)</Label>
+                                        <Label className="font-bold text-sm">บริษัทลูกค้า</Label>
                                         <input type="hidden" name="clientId" value={selectedClientId} />
-                                        <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                                        <input type="hidden" name="clientName" value={clientName} />
+                                        <Select value={selectedClientId || '__none__'} onValueChange={v => {
+                                            setSelectedClientId(v === '__none__' ? '' : v);
+                                            if (v !== '__none__') setClientName('');
+                                        }}>
                                             <SelectTrigger className="rounded-xl h-11 bg-white dark:bg-slate-900">
-                                                <SelectValue placeholder="เลือกลูกค้า..." />
+                                                <SelectValue placeholder="เลือกจากรายชื่อ..." />
                                             </SelectTrigger>
                                             <SelectContent>
-                                                <SelectItem value="">— ไม่ระบุ —</SelectItem>
+                                                <SelectItem value="__none__">— พิมพ์ชื่อเอง —</SelectItem>
                                                 {clients.map(c => (
                                                     <SelectItem key={c.id} value={c.id}>{c.companyName}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
+                                        {/* Show text input when no existing client is selected */}
+                                        {!selectedClientId && (
+                                            <Input
+                                                value={clientName}
+                                                onChange={e => setClientName(e.target.value)}
+                                                placeholder="พิมพ์ชื่อบริษัท / หน่วยงาน..."
+                                                className="rounded-xl h-11 bg-white dark:bg-slate-900 mt-2"
+                                            />
+                                        )}
                                     </div>
 
                                     {/* Token / Link display — show after save or when editing */}

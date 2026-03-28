@@ -415,8 +415,15 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
                                             <div className="font-bold text-[15px] truncate max-w-[85%]">{reg.clientCompanyName || reg.userDisplayName}</div>
                                             <AttendeeStatusBadge status={reg.status === 'cancelled' ? 'cancelled' : reg.status === 'confirmed' ? 'confirmed' : 'pending'} />
                                         </div>
-                                        <div className={cn("text-xs font-semibold truncate", isSelected ? "text-slate-300 dark:text-slate-100/80" : "text-primary")}>
-                                            {coursesMap.get(reg.courseId)?.shortName || reg.courseTitle}
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            <span className={cn("text-xs font-semibold truncate", isSelected ? "text-slate-300 dark:text-slate-100/80" : "text-primary")}>
+                                                {coursesMap.get(reg.courseId)?.shortName || reg.courseTitle}
+                                            </span>
+                                            {schedule?.scheduleType === 'inhouse' ? (
+                                                <span className="text-[9px] font-bold text-violet-600 bg-violet-100 border border-violet-200 px-1.5 py-0.5 rounded leading-none shrink-0">IH</span>
+                                            ) : schedule ? (
+                                                <span className="text-[9px] font-bold text-blue-600 bg-blue-100 border border-blue-200 px-1.5 py-0.5 rounded leading-none shrink-0">PB</span>
+                                            ) : null}
                                         </div>
                                         <div className={cn("text-[11px] flex justify-between items-end mt-1", isSelected ? "text-slate-400 dark:text-slate-200" : "text-slate-500")}>
                                             <span className="flex items-center gap-1.5"><Calendar className="w-3 h-3"/> {schedule ? format(new Date(schedule.startDate), 'd MMM yy', {locale: th}) : 'N/A'}</span>
@@ -457,9 +464,20 @@ export function RegistrationsClientPage({ courses, categories, schedules }: { co
                                             </h2>
                                             <Badge variant="outline" className="font-mono text-[9px] text-muted-foreground uppercase">ID: {selectedRegistration.id.slice(0, 8)}</Badge>
                                         </div>
-                                        <p className="text-sm font-semibold text-primary">{selectedRegistration.courseTitle}</p>
+                                        <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                                            <p className="text-sm font-semibold text-primary">{selectedRegistration.courseTitle}</p>
+                                            {(() => {
+                                                const sel = schedulesMap.get(selectedRegistration.scheduleId);
+                                                if (!sel) return null;
+                                                return sel.scheduleType === 'inhouse' ? (
+                                                    <span className="text-[10px] font-bold text-violet-700 bg-violet-100 border border-violet-200 px-2 py-0.5 rounded-lg leading-none">INHOUSE</span>
+                                                ) : (
+                                                    <span className="text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-lg leading-none">PUBLIC</span>
+                                                );
+                                            })()}
+                                        </div>
                                         <p className="text-xs text-muted-foreground mt-1 flex items-center gap-2">
-                                            <MapPin className="w-3.5 h-3.5"/> 
+                                            <MapPin className="w-3.5 h-3.5"/>
                                             {schedulesMap.get(selectedRegistration.scheduleId)?.location || 'N/A'}
                                         </p>
                                     </div>

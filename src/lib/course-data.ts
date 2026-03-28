@@ -53,7 +53,8 @@ export type TrainingSchedule = {
   caregiverIds?: string[]; // Array of UID of AppUser
   caregiverNames?: string[]; // Denormalized nicknames for display
   scheduleType?: 'public' | 'inhouse'; // undefined = 'public' (backward compat)
-  clientId?: string;      // Linked client company for Inhouse sessions
+  clientId?: string;      // Linked client company for Inhouse sessions (from clients collection)
+  clientName?: string;    // Manual company name — used when clientId is not set
   inhouseToken?: string;  // nanoid(12) — authenticates the client self-registration link
 };
 

@@ -54,13 +54,17 @@ export default async function InhouseRegistrationPage({ params, searchParams }: 
         return <ErrorPage title="ลิงก์หมดอายุหรือไม่ถูกต้อง" description="ลิงก์นี้ถูกรีเซ็ตหรือไม่ถูกต้อง กรุณาขอลิงก์ใหม่จากทีมงาน NET Safety" />;
     }
 
-    // Fetch linked client (optional)
+    // Fetch linked client (optional). Fall back to schedule.clientName for manually typed companies.
     let client: Client | null = null;
     if (schedule.clientId) {
         const clientSnap = await getDoc(doc(db, 'clients', schedule.clientId));
         if (clientSnap.exists()) {
             client = { id: clientSnap.id, ...clientSnap.data() } as Client;
         }
+    }
+    // If no clientId but clientName was typed manually, synthesize a minimal Client-like object
+    if (!client && schedule.clientName) {
+        client = { id: '', companyName: schedule.clientName } as Client;
     }
 
     return <InhouseRegistrationClientPage schedule={schedule} client={client} token={token} />;
