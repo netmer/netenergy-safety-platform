@@ -1,6 +1,7 @@
 'use server';
 
 import { z } from 'zod';
+import { nanoid } from 'nanoid';
 import { db } from '@/lib/firebase';
 import { collection, addDoc, doc, updateDoc, getDoc, deleteDoc, query, where, getDocs, writeBatch } from 'firebase/firestore';
 import { revalidatePath } from 'next/cache';
@@ -17,6 +18,8 @@ const FormSchema = z.object({
   startDate: z.string().min(1, { message: 'กรุณาเลือกวันที่เริ่มต้น' }),
   endDate: z.string().min(1, { message: 'กรุณาเลือกวันที่สิ้นสุด' }),
   instructorName: z.string().optional().or(z.literal('')),
+  scheduleType: z.enum(['public', 'inhouse']).default('public'),
+  clientId: z.string().optional().or(z.literal('')),
 });
 
 export type FormState = {
@@ -27,9 +30,12 @@ export type FormState = {
     startDate?: string[];
     endDate?: string[];
     instructorName?: string[];
+    scheduleType?: string[];
+    clientId?: string[];
   };
   message?: string;
   success?: boolean;
+  inhouseToken?: string; // returned after create/update for Inhouse schedules
 };
 
 async function getCourseTitle(courseId: string): Promise<string> {
@@ -99,7 +105,7 @@ export async function createSchedule(prevState: FormState, formData: FormData): 
     };
   }
 
-  const { courseId, location, status, startDate, endDate, instructorName } = validatedFields.data;
+  const { courseId, location, status, startDate, endDate, instructorName, scheduleType, clientId } = validatedFields.data;
 
   try {
     if (instructorName) {
@@ -107,6 +113,8 @@ export async function createSchedule(prevState: FormState, formData: FormData): 
     }
 
     const courseTitle = await getCourseTitle(courseId);
+    const isInhouse = scheduleType === 'inhouse';
+    const inhouseToken = isInhouse ? nanoid(12) : undefined;
 
     await addDoc(collection(db, 'trainingSchedules'), {
       courseId,
@@ -117,12 +125,15 @@ export async function createSchedule(prevState: FormState, formData: FormData): 
       courseTitle,
       instructorName: instructorName || '',
       instructorTitle: 'วิทยากร',
+      scheduleType: scheduleType || 'public',
+      ...(clientId ? { clientId } : {}),
+      ...(inhouseToken ? { inhouseToken } : {}),
       createdAt: new Date().toISOString(),
     });
 
     revalidatePath('/erp/schedule');
     revalidatePath('/courses');
-    return { success: true, message: 'สร้างรอบอบรมเรียบร้อยแล้ว' };
+    return { success: true, message: 'สร้างรอบอบรมเรียบร้อยแล้ว', inhouseToken };
   } catch (e) {
     console.error("Create Schedule Error:", e);
     return { success: false, message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูล' };
@@ -141,7 +152,7 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
         };
     }
 
-    const { courseId, location, status, startDate, endDate, instructorName } = validatedFields.data;
+    const { courseId, location, status, startDate, endDate, instructorName, scheduleType, clientId } = validatedFields.data;
     const scheduleRef = doc(db, 'trainingSchedules', id);
 
     try {
@@ -157,6 +168,11 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
         const newStartDate = sanitizeDate(startDate);
         const newEndDate = sanitizeDate(endDate);
 
+        // Generate token if switching to Inhouse and not already set
+        const isInhouse = scheduleType === 'inhouse';
+        const existingToken = oldData?.inhouseToken;
+        const inhouseToken = isInhouse && !existingToken ? nanoid(12) : existingToken;
+
         await updateDoc(scheduleRef, {
             courseId,
             location,
@@ -165,6 +181,9 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
             endDate: newEndDate,
             courseTitle,
             instructorName: instructorName || '',
+            scheduleType: scheduleType || 'public',
+            clientId: clientId || null,
+            ...(isInhouse && inhouseToken ? { inhouseToken } : {}),
             updatedAt: new Date().toISOString(),
         });
 
@@ -216,10 +235,21 @@ export async function updateSchedule(id: string, prevState: FormState, formData:
 
         revalidatePath('/erp/schedule');
         revalidatePath('/courses');
-        return { success: true, message: 'อัปเดตข้อมูลเรียบร้อยแล้ว' };
+        return { success: true, message: 'อัปเดตข้อมูลเรียบร้อยแล้ว', inhouseToken: isInhouse ? inhouseToken : undefined };
     } catch (e) {
         console.error("Update Schedule Error:", e);
         return { success: false, message: e instanceof Error ? e.message : 'เกิดข้อผิดพลาดในการอัปเดตข้อมูล' };
+    }
+}
+
+export async function generateInhouseToken(scheduleId: string): Promise<{ success: boolean; token?: string; message?: string }> {
+    try {
+        const token = nanoid(12);
+        await updateDoc(doc(db, 'trainingSchedules', scheduleId), { inhouseToken: token });
+        revalidatePath('/erp/schedule');
+        return { success: true, token };
+    } catch (e) {
+        return { success: false, message: e instanceof Error ? e.message : 'ไม่สามารถสร้างลิงก์ได้' };
     }
 }
 

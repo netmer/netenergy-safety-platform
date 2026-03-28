@@ -133,7 +133,12 @@ export function CourseFilters({
                             <SelectItem value="all">ทุกรอบ</SelectItem>
                             {filteredSchedulesList.map(s => (
                                 <SelectItem key={s.id} value={s.id}>
-                                    {formatDateRangeLabel(s.startDate, s.endDate)} - {s.location}
+                                    <span className="flex items-center gap-1.5">
+                                        {formatDateRangeLabel(s.startDate, s.endDate)} - {s.location}
+                                        {s.scheduleType === 'inhouse' && (
+                                            <span className="text-[9px] font-bold text-violet-600 bg-violet-100 px-1.5 py-0.5 rounded leading-none shrink-0">IH</span>
+                                        )}
+                                    </span>
                                 </SelectItem>
                             ))}
                         </SelectContent>

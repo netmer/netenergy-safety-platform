@@ -87,7 +87,9 @@ export default async function CourseDetailPage({ params }: Props) {
   );
 
   const schedulesSnapshot = await getDocs(schedulesQuery);
-  const activeSchedules = schedulesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TrainingSchedule));
+  const activeSchedules = schedulesSnapshot.docs
+    .map(doc => ({ id: doc.id, ...doc.data() } as TrainingSchedule))
+    .filter(s => s.scheduleType !== 'inhouse'); // hide Inhouse-only schedules from public website
   
   // SEO Structured Data (JSON-LD)
   const courseJsonLd = {

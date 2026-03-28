@@ -1,7 +1,7 @@
 
 import { db } from '@/lib/firebase';
 import { collection, getDocs, query, where, orderBy, Timestamp } from 'firebase/firestore';
-import type { TrainingSchedule, Course, CourseCategory, Instructor } from '@/lib/course-data';
+import type { TrainingSchedule, Course, CourseCategory, Instructor, Client } from '@/lib/course-data';
 import { ScheduleClientPage } from './schedule-client-page';
 import { unstable_noStore as noStore } from 'next/cache';
 
@@ -21,11 +21,12 @@ const toISOStringSafe = (date: any): string | null => {
 export default async function ManageSchedulePage() {
   noStore();
 
-  const [allSchedules, allCourses, allCategories, allInstructors] = await Promise.all([
+  const [allSchedules, allCourses, allCategories, allInstructors, allClients] = await Promise.all([
     getDocs(query(collection(db, 'trainingSchedules'), orderBy('startDate', 'desc'))),
     getDocs(query(collection(db, 'courses'), orderBy('orderIndex', 'asc'))),
     getDocs(query(collection(db, 'courseCategories'), orderBy('orderIndex', 'asc'))),
     getDocs(query(collection(db, 'instructors'), orderBy('name'))),
+    getDocs(query(collection(db, 'clients'), orderBy('companyName'))),
   ]);
 
   const schedules = allSchedules.docs.map(doc => {
@@ -40,13 +41,15 @@ export default async function ManageSchedulePage() {
   const courses = allCourses.docs.map(doc => ({ id: doc.id, ...doc.data() } as Course));
   const categories = allCategories.docs.map(doc => ({ id: doc.id, ...doc.data() } as CourseCategory));
   const instructors = allInstructors.docs.map(doc => ({ id: doc.id, ...doc.data() } as Instructor));
-  
+  const clients = allClients.docs.map(doc => ({ id: doc.id, ...doc.data() } as Client));
+
   return (
-    <ScheduleClientPage 
-        schedules={schedules} 
-        courses={courses} 
-        categories={categories} 
+    <ScheduleClientPage
+        schedules={schedules}
+        courses={courses}
+        categories={categories}
         instructors={instructors}
+        clients={clients}
     />
   );
 }

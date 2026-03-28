@@ -705,9 +705,20 @@ export function AttendeeManagementClientPage({ schedules, courses, categories, r
                     <Card className="border-none shadow-xl rounded-[2.5rem] overflow-hidden bg-gradient-to-br from-white to-slate-50 dark:from-slate-900 dark:to-slate-950">
                         <CardHeader className="p-8 pb-6 text-left border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
                             <div className="space-y-3">
-                                <CardTitle className="text-2xl font-bold font-headline text-slate-900 dark:text-white leading-tight">
-                                    {selectedScheduleDetails?.courseTitle}
-                                </CardTitle>
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <CardTitle className="text-2xl font-bold font-headline text-slate-900 dark:text-white leading-tight">
+                                        {selectedScheduleDetails?.courseTitle}
+                                    </CardTitle>
+                                    {(selectedScheduleDetails as any)?.scheduleType === 'inhouse' ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-violet-700 bg-violet-100 border border-violet-200 px-2 py-0.5 rounded-lg">
+                                            <Building className="w-3 h-3" /> INHOUSE
+                                        </span>
+                                    ) : (selectedScheduleDetails as any)?.scheduleType === 'public' || selectedScheduleDetails ? (
+                                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-700 bg-blue-100 border border-blue-200 px-2 py-0.5 rounded-lg">
+                                            PUBLIC
+                                        </span>
+                                    ) : null}
+                                </div>
                                 <div className="flex flex-wrap items-center gap-3 text-sm">
                                     <span className="flex items-center gap-1.5 text-blue-600 bg-blue-50 px-3 py-1.5 rounded-xl font-semibold"><Calendar className="w-4 h-4" /> {selectedScheduleDetails?.startDate ? format(new Date(selectedScheduleDetails.startDate), 'd MMM yyyy', { locale: th }) : ''}</span>
                                     <span className="flex items-center gap-1.5 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-xl font-semibold"><Users className="w-4 h-4" /> ผู้อบรม {records.length} คน</span>
