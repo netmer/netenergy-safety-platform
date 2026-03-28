@@ -8,6 +8,7 @@ import { revalidatePath } from 'next/cache';
 import type { Course, RegistrationFormField, RegistrationAttendee, RegistrationForm, Client, Registration } from '@/lib/course-data';
 import { sendEmail, emailTemplates } from '@/lib/mail';
 import { createSystemNotification } from '@/lib/notifications';
+import { buildFullName } from '@/lib/attendee-utils';
 
 export interface RegistrationFormState {
   success: boolean;
@@ -130,6 +131,17 @@ export async function submitRegistration(prevState: RegistrationFormState, formD
       
       for (const attendeeId of attendeeIds) {
         const newAttendee: Partial<RegistrationAttendee> = { id: attendeeId, status: 'pending' };
+
+        // Extract built-in name fields (always present in new forms)
+        const title = (formData.get(`__title__-${attendeeId}`) as string) || '';
+        const firstName = ((formData.get(`__firstname__-${attendeeId}`) as string) || '').trim();
+        const lastName = ((formData.get(`__lastname__-${attendeeId}`) as string) || '').trim();
+        if (firstName) {
+          newAttendee['title'] = title;
+          newAttendee['firstName'] = firstName;
+          newAttendee['lastName'] = lastName;
+          newAttendee['fullName'] = buildFullName(title, firstName, lastName);
+        }
 
         for (const subField of attendeeSubFields) {
           const formKey = `${subField.id}-${attendeeId}`;

@@ -53,7 +53,15 @@ const addressFieldKeys = [
     { name: 'taxId', label: 'เลขประจำตัวผู้เสียภาษี / เลขบัตรประชาชน', required: true, span: 'md:col-span-2' },
 ] as const;
 
+// Subfields that duplicate the built-in name section — skip these
+const NAME_SUBFIELD_LABELS = new Set(['ชื่อ', 'นามสกุล', 'คำนำหน้า', 'ชื่อจริง', 'ชื่อ-นามสกุล', 'ชื่อ – นามสกุล', 'ชื่อ–นามสกุล']);
+function isNameSubField(label: string) {
+    const l = label.trim();
+    return NAME_SUBFIELD_LABELS.has(l) || l.toLowerCase().includes('ชื่อ-นามสกุล') || l.toLowerCase().includes('ชื่อ–นามสกุล');
+}
+
 function AttendeeSubForm({ attendee, subFields, onRemove, required }: { attendee: Partial<RegistrationAttendee> & {id: string}, subFields: RegistrationFormField['subFields'], onRemove: (id: string) => void, required: boolean}) {
+    const extraSubFields = (subFields || []).filter(sf => !isNameSubField(sf.label));
     return (
          <Card className="relative bg-slate-50 dark:bg-slate-900 border-dashed border-2 rounded-2xl overflow-hidden">
             <CardHeader className='pb-4 flex flex-row items-center justify-between space-y-0'>
@@ -64,13 +72,50 @@ function AttendeeSubForm({ attendee, subFields, onRemove, required }: { attendee
                 </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-                {(subFields || []).map(subField => (
+                {/* Built-in name fields */}
+                <div className="grid grid-cols-12 gap-2">
+                    <div className="col-span-3 space-y-2 text-left">
+                        <Label className="text-sm font-medium">คำนำหน้า<span className="text-destructive"> *</span></Label>
+                        <Select name={`__title__-${attendee.id}`} defaultValue="นาย">
+                            <SelectTrigger className="rounded-xl h-10"><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="นาย">นาย</SelectItem>
+                                <SelectItem value="นาง">นาง</SelectItem>
+                                <SelectItem value="นางสาว">นางสาว</SelectItem>
+                                <SelectItem value="ดร.">ดร.</SelectItem>
+                                <SelectItem value="อื่นๆ">อื่นๆ</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="col-span-4 space-y-2 text-left">
+                        <Label htmlFor={`__firstname__-${attendee.id}`} className="text-sm font-medium">ชื่อ<span className="text-destructive"> *</span></Label>
+                        <Input
+                            id={`__firstname__-${attendee.id}`}
+                            name={`__firstname__-${attendee.id}`}
+                            placeholder="ชื่อจริง"
+                            required
+                            className="rounded-xl"
+                        />
+                    </div>
+                    <div className="col-span-5 space-y-2 text-left">
+                        <Label htmlFor={`__lastname__-${attendee.id}`} className="text-sm font-medium">นามสกุล<span className="text-destructive"> *</span></Label>
+                        <Input
+                            id={`__lastname__-${attendee.id}`}
+                            name={`__lastname__-${attendee.id}`}
+                            placeholder="นามสกุล"
+                            required
+                            className="rounded-xl"
+                        />
+                    </div>
+                </div>
+                {/* Dynamic subfields (e.g., ID card, documents) — name-related labels are skipped above */}
+                {extraSubFields.map(subField => (
                     <div key={subField.id} className="space-y-2 text-left">
                         <Label htmlFor={`${subField.id}-${attendee.id}`} className="text-sm font-medium">{subField.label}{required && subField.required && <span className="text-destructive"> *</span>}</Label>
-                        <Input 
-                            id={`${subField.id}-${attendee.id}`} 
-                            name={`${subField.id}-${attendee.id}`} 
-                            type={subField.type} 
+                        <Input
+                            id={`${subField.id}-${attendee.id}`}
+                            name={`${subField.id}-${attendee.id}`}
+                            type={subField.type}
                             accept={subField.type === 'file' ? 'image/*,application/pdf' : undefined}
                             placeholder={subField.placeholder}
                             required={required && subField.required}

@@ -8,6 +8,7 @@ import type { Registration, RegistrationStatus, IndividualAttendeeStatus, Regist
 import { z } from 'zod';
 import { sendEmail, emailTemplates } from '@/lib/mail';
 import { writeAuditLog } from '@/lib/audit';
+import { buildFullName } from '@/lib/attendee-utils';
 import { generateQuotationAction, generateInvoiceAction } from '@/app/erp/billing/actions';
 import { createSystemNotification } from '@/lib/notifications';
 
@@ -482,15 +483,29 @@ export async function updateIndividualAttendeeStatus({
       const existingAttendeeIds = new Set(existingRecordsSnap.docs.map(d => d.data().registrationAttendeeId as string));
 
       const attendeeListSchema = registrationData.formSchema.find(f => f.id === attendeeListFieldId);
-      const fullNameField = attendeeListSchema?.subFields?.find(f => f.label.includes("ชื่อ-นามสกุล"));
 
       for (const attendeeId of attendeeIds) {
         const attendeeToConfirm = currentAttendees.find(a => a.id === attendeeId);
         if (attendeeToConfirm && attendeeToConfirm.status !== 'confirmed' && !existingAttendeeIds.has(attendeeId)) {
-            const attendeeName = fullNameField ? (attendeeToConfirm[fullNameField.id] as string) : 'ผู้อบรม';
+            // New format: separate title/firstName/lastName stored on the attendee object
+            let attendeeName: string;
+            if (attendeeToConfirm.firstName) {
+                attendeeName = buildFullName(
+                    attendeeToConfirm.title,
+                    attendeeToConfirm.firstName,
+                    attendeeToConfirm.lastName
+                );
+            } else {
+                // Backward compat: old registrations used a combined "ชื่อ-นามสกุล" subfield
+                const fullNameField = attendeeListSchema?.subFields?.find(f => f.label.includes("ชื่อ-นามสกุล"));
+                attendeeName = fullNameField ? (attendeeToConfirm[fullNameField.id] as string) : 'ผู้อบรม';
+            }
             const trainingRecordData: Omit<TrainingRecord, 'id'> = {
               attendeeId: attendeeToConfirm.attendeeId || null,
-              attendeeName: attendeeName,
+              attendeeName,
+              attendeeTitle: attendeeToConfirm.title || '',
+              attendeeFirstName: attendeeToConfirm.firstName || '',
+              attendeeLastName: attendeeToConfirm.lastName || '',
               companyName: registrationData.clientCompanyName || 'บุคคลทั่วไป',
               registrationId: registrationId,
               registrationAttendeeId: attendeeToConfirm.id,

@@ -180,13 +180,16 @@ function EditableField({ index, field, isSelected, onSelect, onUpdate, onRemove,
                             <Table>
                                 <TableHeader>
                                     <TableRow>
+                                        <TableHead className="text-violet-600 font-semibold">คำนำหน้า</TableHead>
+                                        <TableHead className="text-violet-600 font-semibold">ชื่อ</TableHead>
+                                        <TableHead className="text-violet-600 font-semibold">นามสกุล</TableHead>
                                         {(field.subFields || []).map(sub => <TableHead key={sub.id}>{sub.label}</TableHead>)}
                                         <TableHead><span className="sr-only">Actions</span></TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     <TableRow>
-                                        <TableCell colSpan={(field.subFields?.length || 0) + 1} className="text-center text-muted-foreground py-6">
+                                        <TableCell colSpan={(field.subFields?.length || 0) + 4} className="text-center text-muted-foreground py-6">
                                             ตัวอย่างรายชื่อจะแสดงที่นี่
                                         </TableCell>
                                     </TableRow>
@@ -291,7 +294,17 @@ function EditableField({ index, field, isSelected, onSelect, onUpdate, onRemove,
 
                      {type === 'attendee_list' && (
                         <div className="space-y-4 pt-4">
-                            <Label className="font-semibold">ฟิลด์ย่อยสำหรับผู้เข้าอบรม</Label>
+                            <div>
+                                <Label className="font-semibold">ฟิลด์ย่อยสำหรับผู้เข้าอบรม</Label>
+                                <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {['คำนำหน้า', 'ชื่อ', 'นามสกุล'].map(n => (
+                                        <span key={n} className="inline-flex items-center gap-1 text-xs bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-700 px-2 py-0.5 rounded-full font-medium">
+                                            <CheckCircle2 className="w-3 h-3" /> {n} (built-in)
+                                        </span>
+                                    ))}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-1.5">ฟิลด์ชื่อถูกเพิ่มอัตโนมัติ ไม่ต้องเพิ่มเอง ด้านล่างคือฟิลด์เสริม เช่น เลขบัตรประชาชน ตำแหน่ง เอกสาร</p>
+                            </div>
                             <div className="space-y-3">
                                 {(field.subFields || []).map((subField, subIndex) => (
                                     <div key={subField.id} className="flex items-start gap-2 p-3 rounded-md bg-muted/50 border">
@@ -326,10 +339,10 @@ function EditableField({ index, field, isSelected, onSelect, onUpdate, onRemove,
                                 ))}
                             </div>
                             <Button type="button" variant="ghost" className="w-full border-2 border-dashed" onClick={() => addSubField('text')}>
-                                <Plus className="mr-2 h-4 w-4" /> เพิ่มฟิลด์ย่อย (ข้อความ/เบอร์โทร)
+                                <Plus className="mr-2 h-4 w-4" /> เพิ่มฟิลด์เสริม (ข้อความ/เบอร์โทร)
                             </Button>
                             <Button type="button" variant="ghost" className="w-full border-2 border-dashed" onClick={() => addSubField('file')}>
-                                <Plus className="mr-2 h-4 w-4" /> เพิ่มฟิลด์ย่อย (ไฟล์)
+                                <Plus className="mr-2 h-4 w-4" /> เพิ่มฟิลด์เสริม (ไฟล์)
                             </Button>
                         </div>
                      )}
